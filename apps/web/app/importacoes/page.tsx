@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { FormEvent, useEffect, useState } from 'react';
+import { Navigation } from '../components/navigation';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 
@@ -46,7 +47,7 @@ export default function ImportsPage() {
 
   return (
     <main className="shell">
-      <header className="topbar"><span className="brand">Confirma SUS</span><span>Importações</span></header>
+      <Navigation current="/importacoes" />
       <section className="container">
         <p className="eyebrow">Nova importação</p>
         <h1>Importe o relatório SISREG</h1>
