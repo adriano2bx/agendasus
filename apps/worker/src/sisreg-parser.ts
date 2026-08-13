@@ -214,5 +214,80 @@ export async function parseSisregPdf(data: Uint8Array): Promise<SisregParseResul
     }
   }
 
-  return parseSisregLines(rebuildLines(items), document.numPages);
+  return parseSisregPositionedItems(items, document.numPages);
+}
+
+/**
+ * The SISREG PDF renders each appointment as a visual card: patient details
+ * are above the request code and scheduling/procedure details are below it.
+ * Reading only linear text interleaves columns, so this parser keeps the PDF
+ * coordinates as the source of truth for the real SISREG_V1 layout.
+ */
+export function parseSisregPositionedItems(items: readonly PositionedText[], pageCount: number): SisregParseResult {
+  const lines = rebuildLines(items);
+  const fullText = lines.join('\n');
+  const layout = /SISREG|Sistema Nacional de Regula[cç][aã]o/i.test(fullText) ? 'SISREG_V1' : 'UNKNOWN';
+  const codes = items
+    .filter((item) => item.x < 85 && /^\d{7,12}$/.test(item.text.trim()))
+    .sort((left, right) => left.page - right.page || right.y - left.y);
+  const rows = codes.map((code, index) => {
+    const previous = codes[index - 1];
+    const next = codes[index + 1];
+    // The first card on a page follows a long report header. A bounded window
+    // above its code prevents header labels from being treated as a patient.
+    const upper = previous?.page === code.page ? (previous.y + code.y) / 2 : code.y + 60;
+    const lower = next?.page === code.page ? (next.y + code.y) / 2 : Number.NEGATIVE_INFINITY;
+    const block = items.filter((item) => item.page === code.page && item.y <= upper && item.y >= lower && item.text.trim());
+    return parsePositionedRecord(code, block, index + 1);
+  });
+  const pagination = fullText.match(/P[aá]gina\s+\d+\s+de\s+(\d+)/i);
+  const reportedTotal = fullText.match(/(?:Resultados por p[aá]gina|Total|Quantidade)\D{0,20}(\d{1,7})/i);
+  const warnings: string[] = [];
+  const reportedPageCount = pagination?.[1] ? Number(pagination[1]) : null;
+  const totalReported = reportedTotal?.[1] ? Number(reportedTotal[1]) : null;
+  if (layout === 'UNKNOWN') warnings.push('Layout do PDF não reconhecido com segurança.');
+  if (reportedPageCount !== null && reportedPageCount > pageCount) warnings.push(`O documento informa ${reportedPageCount} páginas, mas o arquivo contém ${pageCount}.`);
+  if (rows.length === 0) warnings.push('Nenhum registro de convocação foi identificado.');
+  return { layout, pageCount, reportedPageCount, totalReported, rows, warnings };
+}
+
+function parsePositionedRecord(code: PositionedText, block: readonly PositionedText[], rowNumber: number): ParsedSisregRow {
+  const at = (min: number, max: number) => block.filter((item) => item.x >= min && item.x < max).sort((left, right) => right.y - left.y);
+  const nameParts = at(150, 230)
+    .filter((item) => item.y >= code.y && !/Paciente:/i.test(item.text))
+    .map((item) => compactName(item.text));
+  const birth = at(225, 295).map((item) => extractSpacedDates(item.text)[0]).find(Boolean) ?? null;
+  const phone = at(490, 560).flatMap((item) => extractPhones(normalizeSisregSpacing(item.text)));
+  const schedule = at(425, 500).map((item) => item.text).join(' ');
+  const scheduleDates = extractSpacedDates(schedule);
+  const scheduleTime = extractSpacedTimes(schedule)[0] ?? null;
+  const procedureText = at(225, 490).map((item) => item.text).join(' ');
+  const row: ParsedSisregRow = {
+    rowNumber,
+    rawText: [...block].sort((left, right) => right.y - left.y || left.x - right.x).map((item) => item.text.trim()).filter(Boolean).join(' '),
+    codigoConvocacaoOrigem: code.text.trim(),
+    nome: nameParts.length ? nameParts.join(' ') : null,
+    dataNascimento: birth,
+    cpf: null,
+    telefones: [...new Set(phone)],
+    dataHora: scheduleDates[0] && scheduleTime ? `${scheduleDates[0]} ${scheduleTime}` : null,
+    procedimentos: extractProcedure(procedureText) ? [extractProcedure(procedureText)!] : [],
+    issues: [],
+  };
+  if (!row.nome) row.issues.push('Nome não identificado com segurança.');
+  if (!row.dataNascimento) row.issues.push('Data de nascimento ausente.');
+  if (row.telefones.length === 0) row.issues.push('Telefone ausente.');
+  if (!row.dataHora) row.issues.push('Data/hora ausente.');
+  if (row.procedimentos.length === 0) row.issues.push('Procedimento ausente.');
+  return row;
+}
+
+function compactName(value: string): string {
+  return value.replace(/\s+/g, '').trim();
+}
+
+function extractPhones(value: string): string[] {
+  return [...value.matchAll(PHONE_PATTERN)]
+    .map((match) => match[0].trim())
+    .filter((phone) => phone.replace(/\D/g, '').length >= 10 && (phone.includes('-') || (phone.includes('(') && phone.includes(')'))));
 }
