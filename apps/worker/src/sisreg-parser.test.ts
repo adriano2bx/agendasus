@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseSisregLines, rebuildLines } from './sisreg-parser.js';
+import { parseSisregLines, parseSisregPositionedItems, rebuildLines } from './sisreg-parser.js';
 
 describe('parser SISREG', () => {
   it('reconstrói linhas por página, posição vertical e horizontal', () => {
@@ -46,5 +46,24 @@ describe('parser SISREG', () => {
     assert.equal(result.rows[0]?.dataNascimento, '24/12/1973');
     assert.deepEqual(result.rows[0]?.telefones, ['(66)99202-7503']);
     assert.equal(result.rows[0]?.procedimentos[0], 'TOMOGRAFIA POR EMISSÃO DE PÓSITRONS (PET-CT)');
+  });
+
+  it('remove o rodapé estatístico incorporado ao último nome', () => {
+    const result = parseSisregPositionedItems(
+      [
+        { text: 'SISREG', x: 20, y: 850, page: 1 },
+        { text: '652548803', x: 41, y: 700, page: 1 },
+        { text: 'Paciente:', x: 166, y: 750, page: 1 },
+        { text: 'JA C I N I RA M A RI A BO A V E N T U RA ESTATÍSTICAS DA PESQUISA: Vagas de 1ª Vez', x: 166, y: 740, page: 1 },
+        { text: '0 7 /0 6 /1 9 5 4', x: 233, y: 740, page: 1 },
+        { text: '(6 5 ) 9 9 2 1 6 - 8 0 8 2', x: 500, y: 740, page: 1 },
+        { text: '0 2 /0 3 /2 0 2 6 - 15:00', x: 434, y: 680, page: 1 },
+        { text: 'T O M O G RA FI A P O R E M I SSÃ O D E P Ó SI T RO N S (P E T-C T )', x: 243, y: 670, page: 1 },
+      ],
+      1,
+    );
+
+    assert.equal(result.rows[0]?.nome, 'JACINIRAMARIABOAVENTURA');
+    assert.ok(!result.rows[0]?.nome?.includes('ESTATÍSTICAS'));
   });
 });
