@@ -280,7 +280,7 @@ export function parseSisregPositionedItems(items: readonly PositionedText[], pag
 function parsePositionedRecord(code: PositionedText, block: readonly PositionedText[], rowNumber: number): ParsedSisregRow {
   const at = (min: number, max: number) => block.filter((item) => item.x >= min && item.x < max).sort((left, right) => right.y - left.y);
   const nameParts = at(150, 230)
-    .filter((item) => !/Paciente:/i.test(item.text))
+    .filter((item) => !/Paciente:|Estat[ií]sticas\s+da\s+pesquisa|Vagas\s+de|Solicita[cç][oõ]es|Total\s+de/i.test(item.text))
     .map((item) => compactName(item.text));
   const birth = at(225, 295).map((item) => extractSpacedDates(item.text)[0]).find(Boolean) ?? null;
   const phone = at(490, 560).flatMap((item) => extractPhones(normalizeSisregSpacing(item.text)));
