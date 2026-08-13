@@ -1,0 +1,373 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERATOR
+}
+
+enum ImportStatus {
+  UPLOADED
+  PROCESSING
+  REVIEW_REQUIRED
+  READY_FOR_REVIEW
+  APPROVED
+  FAILED
+}
+
+enum RowValidationStatus {
+  VALID
+  WARNING
+  INVALID
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum ConvocationStage {
+  FIRST
+  SECOND
+  THIRD
+  FINISHED
+}
+
+enum ConvocationStatus {
+  SCHEDULED
+  QUEUED
+  PROCESSING
+  WAITING_RESPONSE
+  CONFIRMED
+  CANCELLED
+  SEND_ERROR
+  FINISHED_NO_RESPONSE
+}
+
+enum MessageStatus {
+  QUEUED
+  PROCESSING
+  SUBMITTED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  PROCESSED
+  IGNORED
+  FAILED
+}
+
+enum ResponseAction {
+  CONFIRM
+  CANCEL
+  FREE_TEXT
+  UNKNOWN
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         UserRole   @default(OPERATOR)
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Import {
+  id                 String       @id @default(uuid()) @db.Uuid
+  status             ImportStatus @default(UPLOADED)
+  layout             String?
+  totalReported      Int?         @map("total_reported")
+  recordsFound       Int          @default(0) @map("records_found")
+  validationSummary Json?         @map("validation_summary")
+  warnings           Json?
+  failureReason      String?      @map("failure_reason")
+  approvedAt         DateTime?    @map("approved_at") @db.Timestamptz(3)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  files              ImportFile[]
+  rows               ImportRow[]
+  sourceRecords      SourceRecord[]
+  campaigns          Campaign[]
+
+  @@index([status, createdAt])
+  @@map("imports")
+}
+
+model ImportFile {
+  id           String   @id @default(uuid()) @db.Uuid
+  importId     String   @map("import_id") @db.Uuid
+  originalName String   @map("original_name")
+  mimeType     String   @map("mime_type")
+  sizeBytes    Int      @map("size_bytes")
+  checksum     String
+  temporaryKey String?  @map("temporary_key")
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  import       Import   @relation(fields: [importId], references: [id], onDelete: Cascade)
+  rows         ImportRow[]
+
+  @@index([importId])
+  @@map("import_files")
+}
+
+model ImportRow {
+  id               String              @id @default(uuid()) @db.Uuid
+  importId         String              @map("import_id") @db.Uuid
+  importFileId     String              @map("import_file_id") @db.Uuid
+  rowNumber        Int                 @map("row_number")
+  rawData          Json                @map("raw_data")
+  normalizedData   Json?               @map("normalized_data")
+  validationStatus RowValidationStatus @map("validation_status")
+  validationIssues Json?               @map("validation_issues")
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  import           Import              @relation(fields: [importId], references: [id], onDelete: Cascade)
+  file             ImportFile          @relation(fields: [importFileId], references: [id], onDelete: Cascade)
+  sourceRecord     SourceRecord?
+
+  @@unique([importFileId, rowNumber])
+  @@index([importId, validationStatus])
+  @@map("import_rows")
+}
+
+model Patient {
+  id             String         @id @default(uuid()) @db.Uuid
+  normalizedName String         @map("normalized_name")
+  displayName    String         @map("display_name")
+  birthDate      DateTime       @map("birth_date") @db.Date
+  cpf            String?
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  phones         PatientPhone[]
+  convocations   Convocation[]
+
+  @@index([cpf])
+  @@index([normalizedName, birthDate])
+  @@map("patients")
+}
+
+model PatientPhone {
+  id               String   @id @default(uuid()) @db.Uuid
+  patientId        String   @map("patient_id") @db.Uuid
+  originalValue    String   @map("original_value")
+  normalizedValue  String   @map("normalized_value")
+  valid             Boolean
+  mobile            Boolean
+  selectedForWhatsApp Boolean @default(false) @map("selected_for_whatsapp")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  patient           Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, normalizedValue])
+  @@index([normalizedValue])
+  @@map("patient_phones")
+}
+
+model Campaign {
+  id                 String         @id @default(uuid()) @db.Uuid
+  importId           String         @map("import_id") @db.Uuid
+  name               String
+  status             CampaignStatus @default(DRAFT)
+  firstActionAt      DateTime?      @map("first_action_at") @db.Timestamptz(3)
+  secondIntervalDays Int?           @map("second_interval_days")
+  secondStartTime    String?        @map("second_start_time")
+  thirdIntervalDays  Int?           @map("third_interval_days")
+  thirdStartTime     String?        @map("third_start_time")
+  startedAt          DateTime?      @map("started_at") @db.Timestamptz(3)
+  completedAt        DateTime?      @map("completed_at") @db.Timestamptz(3)
+  cancelledAt        DateTime?      @map("cancelled_at") @db.Timestamptz(3)
+  createdAt          DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  import             Import         @relation(fields: [importId], references: [id])
+  convocations       Convocation[]
+
+  @@index([status, firstActionAt])
+  @@map("campaigns")
+}
+
+model SourceRecord {
+  id                      String      @id @default(uuid()) @db.Uuid
+  importId                String      @map("import_id") @db.Uuid
+  importRowId             String      @unique @map("import_row_id") @db.Uuid
+  codigoConvocacaoOrigem  String      @map("codigo_convocacao_origem")
+  scheduledAt             DateTime    @map("scheduled_at") @db.Timestamptz(3)
+  createdAt               DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  import                  Import      @relation(fields: [importId], references: [id])
+  importRow               ImportRow   @relation(fields: [importRowId], references: [id])
+  procedures              Procedure[]
+  convocations            ConvocationRecord[]
+
+  @@index([importId])
+  @@index([codigoConvocacaoOrigem])
+  @@map("source_records")
+}
+
+model Procedure {
+  id             String       @id @default(uuid()) @db.Uuid
+  sourceRecordId String       @map("source_record_id") @db.Uuid
+  name           String
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  sourceRecord   SourceRecord @relation(fields: [sourceRecordId], references: [id], onDelete: Cascade)
+
+  @@index([sourceRecordId])
+  @@map("procedures")
+}
+
+model Convocation {
+  id             String             @id @default(uuid()) @db.Uuid
+  campaignId     String             @map("campaign_id") @db.Uuid
+  patientId      String             @map("patient_id") @db.Uuid
+  stage          ConvocationStage   @default(FIRST)
+  status         ConvocationStatus  @default(SCHEDULED)
+  nextActionAt   DateTime?          @map("next_action_at") @db.Timestamptz(3)
+  confirmedAt    DateTime?          @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt    DateTime?          @map("cancelled_at") @db.Timestamptz(3)
+  finishedAt     DateTime?          @map("finished_at") @db.Timestamptz(3)
+  version        Int                @default(0)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  campaign       Campaign           @relation(fields: [campaignId], references: [id])
+  patient        Patient            @relation(fields: [patientId], references: [id])
+  records        ConvocationRecord[]
+  messages       Message[]
+  responses      MessageResponse[]
+
+  @@unique([campaignId, patientId])
+  @@index([status, nextActionAt])
+  @@index([campaignId, stage, status])
+  @@map("convocations")
+}
+
+model ConvocationRecord {
+  convocationId String       @map("convocation_id") @db.Uuid
+  sourceRecordId String      @map("source_record_id") @db.Uuid
+  convocation   Convocation  @relation(fields: [convocationId], references: [id], onDelete: Cascade)
+  sourceRecord  SourceRecord @relation(fields: [sourceRecordId], references: [id])
+
+  @@id([convocationId, sourceRecordId])
+  @@map("convocation_records")
+}
+
+model Message {
+  id                String            @id @default(uuid()) @db.Uuid
+  convocationId     String            @map("convocation_id") @db.Uuid
+  stage             ConvocationStage
+  attemptNumber     Int               @map("attempt_number")
+  templateName      String            @map("template_name")
+  templateId        String            @map("template_id")
+  phone             String
+  status            MessageStatus     @default(QUEUED)
+  providerMessageId String?           @unique @map("provider_message_id")
+  idempotencyKey    String            @unique @map("idempotency_key")
+  submittedAt       DateTime?         @map("submitted_at") @db.Timestamptz(3)
+  sentAt            DateTime?         @map("sent_at") @db.Timestamptz(3)
+  deliveredAt       DateTime?         @map("delivered_at") @db.Timestamptz(3)
+  readAt            DateTime?         @map("read_at") @db.Timestamptz(3)
+  failedAt          DateTime?         @map("failed_at") @db.Timestamptz(3)
+  failureCode       String?           @map("failure_code")
+  failureReason     String?           @map("failure_reason")
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  convocation       Convocation       @relation(fields: [convocationId], references: [id])
+  events            MessageEvent[]
+  responses         MessageResponse[]
+  billingEvents     BillingEvent[]
+
+  @@unique([convocationId, stage, attemptNumber])
+  @@index([convocationId, createdAt])
+  @@index([status, createdAt])
+  @@map("messages")
+}
+
+model MessageEvent {
+  id                String           @id @default(uuid()) @db.Uuid
+  messageId         String?          @map("message_id") @db.Uuid
+  providerMessageId String?          @map("provider_message_id")
+  providerEventId   String?          @unique @map("provider_event_id")
+  eventType         String           @map("event_type")
+  deduplicationKey  String           @unique @map("deduplication_key")
+  receivedAt        DateTime         @default(now()) @map("received_at") @db.Timestamptz(3)
+  processedAt       DateTime?        @map("processed_at") @db.Timestamptz(3)
+  payload           Json
+  processingStatus  ProcessingStatus @default(PENDING) @map("processing_status")
+  processingError   String?          @map("processing_error")
+  message           Message?         @relation(fields: [messageId], references: [id])
+
+  @@index([processingStatus, receivedAt])
+  @@index([providerMessageId])
+  @@map("message_events")
+}
+
+model MessageResponse {
+  id             String             @id @default(uuid()) @db.Uuid
+  messageId      String?            @map("message_id") @db.Uuid
+  convocationId  String             @map("convocation_id") @db.Uuid
+  action         ResponseAction
+  sourceStage    ConvocationStage?  @map("source_stage")
+  rawText        String?            @map("raw_text")
+  receivedAt     DateTime           @map("received_at") @db.Timestamptz(3)
+  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  message        Message?           @relation(fields: [messageId], references: [id])
+  convocation    Convocation        @relation(fields: [convocationId], references: [id])
+
+  @@index([convocationId, receivedAt])
+  @@map("message_responses")
+}
+
+model BillingEvent {
+  id                String   @id @default(uuid()) @db.Uuid
+  messageId         String   @map("message_id") @db.Uuid
+  providerMessageId String?  @map("provider_message_id")
+  providerEventId   String?  @unique @map("provider_event_id")
+  billable          Boolean
+  category          String?
+  status            String?
+  cost              Decimal? @db.Decimal(12, 6)
+  currency          String?  @db.VarChar(3)
+  billingAt         DateTime @map("billing_at") @db.Timestamptz(3)
+  metadata          Json?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  message           Message  @relation(fields: [messageId], references: [id])
+
+  @@index([billingAt])
+  @@index([messageId])
+  @@map("billing_events")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String?  @map("user_id") @db.Uuid
+  eventType    String   @map("event_type")
+  entityType   String?  @map("entity_type")
+  entityId     String?  @map("entity_id")
+  previousData Json?    @map("previous_data")
+  newData      Json?    @map("new_data")
+  reason       String?
+  metadata     Json?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  user         User?    @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+

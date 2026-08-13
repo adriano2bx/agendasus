@@ -1,0 +1,27 @@
+{
+  "name": "confirma-sus",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --parallel --filter @confirma/api --filter @confirma/worker --filter @confirma/web dev",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "format:check": "prettier --check .",
+    "format:write": "prettier --write .",
+    "db:generate": "pnpm --filter @confirma/database generate",
+    "db:migrate": "pnpm --filter @confirma/database migrate",
+    "db:deploy": "pnpm --filter @confirma/database exec prisma migrate deploy",
+    "db:seed": "pnpm --filter @confirma/database seed"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.14",
+    "prettier": "3.5.3",
+    "typescript": "5.9.3"
+  }
+}

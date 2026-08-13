@@ -1,0 +1,15 @@
+node_modules
+.pnpm-store
+.next
+dist
+coverage
+.env
+.env.*
+!.env.example
+*.log
+tmp
+uploads
+apps/**/.next
+apps/**/dist
+packages/**/dist
+

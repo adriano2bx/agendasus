@@ -1,0 +1,24 @@
+{
+  "name": "@confirma/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "rm -rf .next tsconfig.tsbuildinfo && next build",
+    "dev": "next dev",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.14",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "typescript": "5.9.3"
+  }
+}
