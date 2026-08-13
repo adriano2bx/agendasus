@@ -1,5 +1,5 @@
-import { createHash } from 'node:crypto';
-import { BadRequestException, Inject, Injectable } from '@nestjs/common';
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { BadRequestException, ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { Prisma, prisma } from '@confirma/database';
 import { QUEUES, type ProcessWebhookJob } from '@confirma/queue';
 import type { Queue } from 'bullmq';
@@ -16,7 +16,11 @@ interface GupshupEnvelope {
 export class WebhooksService {
   constructor(@Inject(WEBHOOK_QUEUE) private readonly queue: Queue<ProcessWebhookJob>) {}
 
-  async receive(value: unknown) {
+  async receive(value: unknown, secret?: string) {
+    const expected = process.env.GUPSHUP_WEBHOOK_SECRET;
+    if (expected && (!secret || secret.length !== expected.length || !timingSafeEqual(Buffer.from(secret), Buffer.from(expected)))) {
+      throw new ForbiddenException('Assinatura do webhook inválida');
+    }
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
       throw new BadRequestException('Payload de webhook inválido');
     }

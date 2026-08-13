@@ -1,4 +1,5 @@
 import { readFile, unlink } from 'node:fs/promises';
+import { basename, resolve } from 'node:path';
 import { prisma } from '@confirma/database';
 import { QUEUES, createRedisConnection, type ParseImportJob, type SendMessageJob, type ProcessWebhookJob } from '@confirma/queue';
 import { Queue, Worker } from 'bullmq';
@@ -82,12 +83,15 @@ const messageQueue = new Queue<SendMessageJob>(QUEUES.messages, { connection: me
 const messageWorker = new Worker<SendMessageJob>(QUEUES.messages, processSendMessage, {
   connection: messageWorkerConnection,
   concurrency: Number(process.env.MESSAGE_WORKER_CONCURRENCY ?? 5),
+  limiter: { max: Number(process.env.MESSAGE_RATE_LIMIT_MAX ?? 20), duration: Number(process.env.MESSAGE_RATE_LIMIT_DURATION_MS ?? 1_000) },
 });
 const webhookConnection = createRedisConnection();
 const webhookWorker = new Worker<ProcessWebhookJob>(QUEUES.webhooks, processWebhook, { connection: webhookConnection, concurrency: Number(process.env.WEBHOOK_WORKER_CONCURRENCY ?? 10) });
 
 async function enqueueDueConvocations(): Promise<void> {
   const now = new Date();
+  await finalizeNoResponseDue(now);
+  await promoteDueFollowUps(now);
   const due = await prisma.convocation.findMany({
     where: {
       status: 'SCHEDULED',
@@ -111,8 +115,55 @@ async function enqueueDueConvocations(): Promise<void> {
   }
 }
 
+async function promoteDueFollowUps(now: Date): Promise<void> {
+  await prisma.convocation.updateMany({
+    where: {
+      status: 'WAITING_RESPONSE',
+      stage: { in: ['SECOND', 'THIRD'] },
+      nextActionAt: { lte: now },
+      campaign: { status: { in: ['SCHEDULED', 'RUNNING'] } },
+    },
+    data: { status: 'SCHEDULED' },
+  });
+}
+
+async function finalizeNoResponseDue(now: Date): Promise<void> {
+  const finalizable = await prisma.convocation.findMany({
+    where: { stage: 'FINISHED', status: 'WAITING_RESPONSE', nextActionAt: { lte: now }, campaign: { status: { in: ['SCHEDULED', 'RUNNING'] } } },
+    select: { id: true, campaignId: true }, take: 250,
+  });
+  for (const convocation of finalizable) {
+    await prisma.$transaction(async (transaction) => {
+      const updated = await transaction.convocation.updateMany({
+        where: { id: convocation.id, stage: 'FINISHED', status: 'WAITING_RESPONSE', nextActionAt: { lte: now } },
+        data: { status: 'FINISHED_NO_RESPONSE', finishedAt: now, nextActionAt: null },
+      });
+      if (updated.count) await transaction.auditLog.create({
+        data: { eventType: 'CONVOCATION_FINISHED_NO_RESPONSE', entityType: 'convocation', entityId: convocation.id },
+      });
+    });
+  }
+  await prisma.campaign.updateMany({
+    where: { status: { in: ['SCHEDULED', 'RUNNING'] }, convocations: { every: { status: { in: ['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE', 'SEND_ERROR'] } } } },
+    data: { status: 'COMPLETED', completedAt: now },
+  });
+}
+
 const scheduler = setInterval(() => void enqueueDueConvocations().catch((error: unknown) => console.error('Erro no scheduler', error)), Number(process.env.SCHEDULER_INTERVAL_MS ?? 10_000));
+const cleanupTimer = setInterval(() => void cleanupTemporaryFiles().catch((error: unknown) => console.error('Erro na limpeza temporária', error)), 60 * 60 * 1_000);
 void enqueueDueConvocations();
+void cleanupTemporaryFiles();
+
+async function cleanupTemporaryFiles(): Promise<void> {
+  const olderThan = new Date(Date.now() - Number(process.env.TEMP_FILE_MAX_AGE_HOURS ?? 24) * 3_600_000);
+  const files = await prisma.importFile.findMany({ where: { temporaryKey: { not: null }, createdAt: { lt: olderThan } }, take: 100 });
+  const root = resolve(process.env.UPLOAD_TEMP_DIR ?? '/tmp/confirma-sus');
+  for (const file of files) {
+    if (!file.temporaryKey) continue;
+    await unlink(resolve(root, basename(file.temporaryKey))).catch(() => undefined);
+    await prisma.importFile.update({ where: { id: file.id }, data: { temporaryKey: null, deletedAt: new Date() } });
+  }
+}
 
 function isSendableStage(stage: string): stage is SendMessageJob['stage'] {
   return stage === 'FIRST' || stage === 'SECOND' || stage === 'THIRD';
@@ -130,6 +181,7 @@ worker.on('failed', async (job, error) => {
 
 async function shutdown(): Promise<void> {
   clearInterval(scheduler);
+  clearInterval(cleanupTimer);
   await worker.close();
   await messageWorker.close();
   await webhookWorker.close();

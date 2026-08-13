@@ -14,6 +14,7 @@ export async function processWebhook(job: Job<ProcessWebhookJob>): Promise<void>
   try {
     if (type === 'message-event') await processMessageEvent(event.id, payload, providerMessageId);
     else if (type === 'message') await processInboundMessage(event.id, payload, providerMessageId);
+    else if (type === 'billing-event' || type === 'billing') await processBillingEvent(event.id, payload, providerMessageId);
     else await mark(event.id, 'IGNORED');
   } catch (error) {
     await prisma.messageEvent.update({
@@ -22,6 +23,26 @@ export async function processWebhook(job: Job<ProcessWebhookJob>): Promise<void>
     });
     throw error;
   }
+}
+
+async function processBillingEvent(eventId: string, payload: Record<string, unknown>, providerMessageId: string | null) {
+  if (!providerMessageId) return mark(eventId, 'IGNORED');
+  const message = await prisma.message.findFirst({ where: { providerMessageId } });
+  if (!message) return mark(eventId, 'IGNORED');
+  const details = asRecord(payload.payload);
+  const cost = decimalValue(details.cost) ?? decimalValue(payload.cost);
+  const currency = stringValue(details.currency) ?? stringValue(payload.currency);
+  const category = stringValue(details.category) ?? stringValue(asRecord(details.pricing).category);
+  const providerEventId = stringValue(payload.id);
+  if (!providerEventId) return mark(eventId, 'IGNORED');
+  await prisma.$transaction(async (transaction) => {
+    await transaction.billingEvent.upsert({
+      where: { providerEventId },
+      update: {},
+      create: { messageId: message.id, providerMessageId, providerEventId, billable: cost !== null, category, status: stringValue(details.status), cost, currency, billingAt: new Date() },
+    });
+    await transaction.messageEvent.update({ where: { id: eventId }, data: { messageId: message.id, processingStatus: 'PROCESSED', processedAt: new Date() } });
+  });
 }
 
 async function processMessageEvent(eventId: string, payload: Record<string, unknown>, providerMessageId: string | null) {
@@ -90,4 +111,5 @@ async function mark(eventId: string, status: 'PROCESSED' | 'IGNORED') {
 }
 function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function stringValue(value: unknown): string | null { return typeof value === 'string' && value ? value : null; }
+function decimalValue(value: unknown): string | null { return typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' && /^\d+(\.\d+)?$/.test(value) ? value : null; }
 function contextGsId(payload: Record<string, unknown>): string | null { return stringValue(asRecord(payload.context).gsId); }

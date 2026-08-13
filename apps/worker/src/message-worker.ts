@@ -4,6 +4,7 @@ import { templateForStage, type MessageStage } from '@confirma/domain';
 import { QUEUES, type SendMessageJob } from '@confirma/queue';
 import type { Job } from 'bullmq';
 import { GupshupRequestError, sendGupshupTemplate } from './gupshup-client.js';
+import { nextResponseDeadline } from './follow-up-schedule.js';
 
 function stageToMessageStage(stage: ConvocationStage): MessageStage | null {
   return stage === 'FIRST' || stage === 'SECOND' || stage === 'THIRD' ? stage : null;
@@ -94,9 +95,15 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
   }
 
   await prisma.$transaction(async (transaction) => {
+    const message = await transaction.message.findUniqueOrThrow({
+      where: { id: created.messageId },
+      include: { convocation: { include: { campaign: true } } },
+    });
+    const submittedAt = new Date();
+    const next = nextResponseDeadline(submittedAt, message.stage, message.convocation.campaign);
     await transaction.message.update({
       where: { id: created.messageId },
-      data: { status: 'SUBMITTED', providerMessageId, submittedAt: new Date() },
+      data: { status: 'SUBMITTED', providerMessageId, submittedAt },
     });
     await transaction.messageEvent.create({
       data: {
@@ -107,12 +114,14 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
         deduplicationKey: `${mode.toLowerCase()}:${created.messageId}:submitted`,
         payload: { queue: QUEUES.messages, mode },
         processingStatus: 'PROCESSED',
-        processedAt: new Date(),
+        processedAt: submittedAt,
       },
     });
     await transaction.convocation.update({
       where: { id: created.convocationId },
-      data: { status: 'WAITING_RESPONSE', nextActionAt: null },
+      data: next
+        ? { status: 'WAITING_RESPONSE', stage: next.stage, nextActionAt: next.at }
+        : { status: 'WAITING_RESPONSE', nextActionAt: null },
     });
   });
 }

@@ -19,12 +19,15 @@ Monorepo do MVP de automação das convocações SUS por WhatsApp.
 4. Execute `pnpm db:generate` e `pnpm db:migrate`.
 5. Execute `pnpm dev`.
 
-## Fluxo disponível neste incremento
+## Fluxo disponível
 
 1. Faça login e envie um PDF.
 2. O worker extrai os registros e elimina o PDF depois de persistir o resultado.
 3. Abra a importação, revise alertas e registros inválidos e aprove os dados válidos.
 4. Crie uma campanha em `DRAFT`; pacientes são agrupados por CPF ou por nome normalizado + nascimento.
+5. Programe a campanha: scheduler + BullMQ executam primeira, segunda e terceira tentativas.
+6. Confirmação ou cancelamento por botão encerra a convocação; ausência de resposta avança tentativas e, depois da terceira, finaliza após `FINAL_RESPONSE_WINDOW_DAYS`.
+7. Consulte o painel em `/painel`, a lista em `/convocacoes` e exporte CSVs pelas rotas protegidas de relatórios.
 
 Campanhas podem ser programadas e executadas por scheduler. O envio começa em `DRY_RUN`; somente o worker com `MESSAGING_MODE=LIVE` e secrets Gupshup configurados realiza disparos reais. O webhook está disponível em `/api/webhooks/gupshup`.
 
@@ -33,3 +36,10 @@ persistidos. O PostgreSQL é a fonte de verdade dos agendamentos; Redis/BullMQ s
 somente para execução assíncrona.
 
 Para implantação no EasyPanel, consulte [o guia de produção](docs/easypanel.md).
+
+## Pendências antes do piloto
+
+- Validar e ajustar o parser contra PDFs SISREG reais anonimizados.
+- Configurar domínio HTTPS, callback Gupshup e secrets no EasyPanel.
+- Homologar payloads reais de cobrança Gupshup para confirmar os campos de custo recebidos.
+- Configurar backup externo recorrente do PostgreSQL e executar um teste de restauração.
