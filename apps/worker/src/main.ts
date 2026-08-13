@@ -1,10 +1,11 @@
 import { readFile, unlink } from 'node:fs/promises';
 import { basename, resolve } from 'node:path';
 import { prisma } from '@confirma/database';
-import { QUEUES, createRedisConnection, type ParseImportJob, type SendMessageJob, type ProcessWebhookJob } from '@confirma/queue';
+import { QUEUES, createRedisConnection, type ParseImportJob, type SendMessageJob, type ProcessHandoffJob, type ProcessWebhookJob } from '@confirma/queue';
 import { Queue, Worker } from 'bullmq';
 import { processSendMessage } from './message-worker.js';
 import { processWebhook } from './webhook-worker.js';
+import { processHandoff } from './handoff-worker.js';
 import { parseSisregPdf } from './sisreg-parser.js';
 
 const timezone = process.env.APP_TIMEZONE ?? 'America/Cuiaba';
@@ -87,11 +88,19 @@ const messageWorker = new Worker<SendMessageJob>(QUEUES.messages, processSendMes
 });
 const webhookConnection = createRedisConnection();
 const webhookWorker = new Worker<ProcessWebhookJob>(QUEUES.webhooks, processWebhook, { connection: webhookConnection, concurrency: Number(process.env.WEBHOOK_WORKER_CONCURRENCY ?? 10) });
+const handoffQueueConnection = createRedisConnection();
+const handoffWorkerConnection = createRedisConnection();
+const handoffQueue = new Queue<ProcessHandoffJob>(QUEUES.handoffs, { connection: handoffQueueConnection });
+const handoffWorker = new Worker<ProcessHandoffJob>(QUEUES.handoffs, processHandoff, {
+  connection: handoffWorkerConnection,
+  concurrency: Number(process.env.HANDOFF_WORKER_CONCURRENCY ?? 3),
+});
 
 async function enqueueDueConvocations(): Promise<void> {
   const now = new Date();
   await finalizeNoResponseDue(now);
   await promoteDueFollowUps(now);
+  await enqueuePendingHandoffs(now);
   const due = await prisma.convocation.findMany({
     where: {
       status: 'SCHEDULED',
@@ -111,6 +120,26 @@ async function enqueueDueConvocations(): Promise<void> {
     await prisma.convocation.updateMany({
       where: { id: convocation.id, status: 'SCHEDULED' },
       data: { status: 'QUEUED' },
+    });
+  }
+}
+
+async function enqueuePendingHandoffs(now: Date): Promise<void> {
+  if (process.env.HANDOFF_MODE !== 'LIVE') return;
+  const pending = await prisma.handoffEvent.findMany({
+    where: { status: 'PENDING', OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
+    select: { id: true },
+    take: 100,
+  });
+  for (const handoff of pending) {
+    await handoffQueue.add(
+      'process-handoff',
+      { handoffEventId: handoff.id },
+      { jobId: `handoff:${handoff.id}`, removeOnComplete: true, removeOnFail: true },
+    );
+    await prisma.handoffEvent.updateMany({
+      where: { id: handoff.id, status: 'PENDING' },
+      data: { status: 'PROCESSING' },
     });
   }
 }
@@ -185,8 +214,10 @@ async function shutdown(): Promise<void> {
   await worker.close();
   await messageWorker.close();
   await webhookWorker.close();
+  await handoffWorker.close();
   await messageQueue.close();
-  await Promise.all([importConnection.quit(), messageQueueConnection.quit(), messageWorkerConnection.quit(), webhookConnection.quit()]);
+  await handoffQueue.close();
+  await Promise.all([importConnection.quit(), messageQueueConnection.quit(), messageWorkerConnection.quit(), webhookConnection.quit(), handoffQueueConnection.quit(), handoffWorkerConnection.quit()]);
   await prisma.$disconnect();
   process.exit(0);
 }

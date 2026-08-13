@@ -4,6 +4,7 @@ export const QUEUES = {
   imports: 'confirma.imports',
   messages: 'confirma.messages',
   webhooks: 'confirma.webhooks',
+  handoffs: 'confirma.handoffs',
   reports: 'confirma.reports',
 } as const;
 
@@ -20,6 +21,10 @@ export interface SendMessageJob {
 
 export interface ProcessWebhookJob {
   messageEventId: string;
+}
+
+export interface ProcessHandoffJob {
+  handoffEventId: string;
 }
 
 export function createRedisConnection(redisUrl = process.env.REDIS_URL): Redis {

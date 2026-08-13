@@ -92,6 +92,17 @@ async function processInboundMessage(eventId: string, payload: Record<string, un
       await transaction.auditLog.create({
         data: { eventType: action === 'CONFIRM' ? 'PATIENT_CONFIRMED' : 'PATIENT_CANCELLED', entityType: 'convocation', entityId: convocation.id, metadata: { sourceStage: message.stage, messageId: message.id } },
       });
+      if (action === 'CONFIRM' && process.env.HANDOFF_MODE === 'LIVE') {
+        await transaction.handoffEvent.upsert({
+          where: { convocationId: convocation.id },
+          update: {},
+          create: {
+            convocationId: convocation.id,
+            idempotencyKey: `handoff:${convocation.id}`,
+            payload: { trigger: 'PATIENT_CONFIRMED', sourceStage: message.stage, confirmedAt: now.toISOString() },
+          },
+        });
+      }
     }
     await transaction.messageEvent.update({ where: { id: eventId }, data: { messageId: message.id, processingStatus: 'PROCESSED', processedAt: now } });
   });

@@ -4,6 +4,7 @@ import { environment } from '../environment.js';
 import { AuthController } from './auth.controller.js';
 import { AuthGuard } from './auth.guard.js';
 import { AuthService } from './auth.service.js';
+import { BootstrapAdminService } from './bootstrap-admin.service.js';
 
 @Module({
   imports: [
@@ -14,8 +15,7 @@ import { AuthService } from './auth.service.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, AuthGuard],
+  providers: [AuthService, AuthGuard, BootstrapAdminService],
   exports: [AuthGuard],
 })
 export class AuthModule {}
-

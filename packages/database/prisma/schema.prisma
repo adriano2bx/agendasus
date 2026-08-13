@@ -72,6 +72,13 @@ enum ProcessingStatus {
   FAILED
 }
 
+enum HandoffStatus {
+  PENDING
+  PROCESSING
+  SUBMITTED
+  FAILED
+}
+
 enum ResponseAction {
   CONFIRM
   CANCEL
@@ -250,11 +257,31 @@ model Convocation {
   records        ConvocationRecord[]
   messages       Message[]
   responses      MessageResponse[]
+  handoff        HandoffEvent?
 
   @@unique([campaignId, patientId])
   @@index([status, nextActionAt])
   @@index([campaignId, stage, status])
   @@map("convocations")
+}
+
+model HandoffEvent {
+  id              String        @id @default(uuid()) @db.Uuid
+  convocationId   String        @unique @map("convocation_id") @db.Uuid
+  status          HandoffStatus @default(PENDING)
+  attempts        Int           @default(0)
+  idempotencyKey  String        @unique @map("idempotency_key")
+  payload         Json
+  responsePayload Json?         @map("response_payload")
+  failureReason   String?       @map("failure_reason")
+  nextAttemptAt   DateTime?     @map("next_attempt_at") @db.Timestamptz(3)
+  submittedAt     DateTime?     @map("submitted_at") @db.Timestamptz(3)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz(3)
+  convocation     Convocation   @relation(fields: [convocationId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt])
+  @@map("handoff_events")
 }
 
 model ConvocationRecord {
@@ -370,4 +397,3 @@ model AuditLog {
   @@index([userId, createdAt])
   @@map("audit_logs")
 }
-
