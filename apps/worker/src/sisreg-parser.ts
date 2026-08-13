@@ -238,7 +238,33 @@ export function parseSisregPositionedItems(items: readonly PositionedText[], pag
     const upper = previous?.page === code.page ? (previous.y + code.y) / 2 : code.y + 60;
     const lower = next?.page === code.page ? (next.y + code.y) / 2 : Number.NEGATIVE_INFINITY;
     const block = items.filter((item) => item.page === code.page && item.y <= upper && item.y >= lower && item.text.trim());
-    return parsePositionedRecord(code, block, index + 1);
+    const row = parsePositionedRecord(code, block, index + 1);
+    if (row.procedimentos.length === 0) {
+      const procedureLabel = items
+        .filter((item) => item.page === code.page && /Procedimento\(s\):/i.test(item.text) && Math.abs(item.y - code.y) < 100)
+        .sort((left, right) => Math.abs(left.y - code.y) - Math.abs(right.y - code.y))[0];
+      if (procedureLabel) {
+        const adjacentProcedure = items.filter((item) => item.page === code.page && Math.abs(item.y - procedureLabel.y) <= 3).map((item) => item.text).join(' ');
+        const procedure = extractProcedure(adjacentProcedure);
+        if (procedure) {
+          row.procedimentos = [procedure];
+          row.issues = row.issues.filter((issue) => issue !== 'Procedimento ausente.');
+        }
+      }
+    }
+    // A page can end between the patient card and its scheduling/procedure
+    // rows. Attach only the top continuation area of the next page.
+    if (next && next.page > code.page) {
+      const continuation = items.filter((item) => item.page === next.page && item.y > next.y && item.text.trim());
+      const continuationSchedule = continuation.filter((item) => item.x >= 425 && item.x < 500).map((item) => item.text).join(' ');
+      const continuationDate = extractSpacedDates(continuationSchedule)[0];
+      const continuationTime = extractSpacedTimes(continuationSchedule)[0];
+      const continuationProcedure = extractProcedure(continuation.filter((item) => item.x >= 225 && item.x < 490).map((item) => item.text).join(' '));
+      if (!row.dataHora && continuationDate && continuationTime) row.dataHora = `${continuationDate} ${continuationTime}`;
+      if (row.procedimentos.length === 0 && continuationProcedure) row.procedimentos = [continuationProcedure];
+      row.issues = row.issues.filter((issue) => !(issue === 'Data/hora ausente.' && row.dataHora) && !(issue === 'Procedimento ausente.' && row.procedimentos.length > 0));
+    }
+    return row;
   });
   const pagination = fullText.match(/P[aá]gina\s+\d+\s+de\s+(\d+)/i);
   const reportedTotal = fullText.match(/(?:Resultados por p[aá]gina|Total|Quantidade)\D{0,20}(\d{1,7})/i);
@@ -254,7 +280,7 @@ export function parseSisregPositionedItems(items: readonly PositionedText[], pag
 function parsePositionedRecord(code: PositionedText, block: readonly PositionedText[], rowNumber: number): ParsedSisregRow {
   const at = (min: number, max: number) => block.filter((item) => item.x >= min && item.x < max).sort((left, right) => right.y - left.y);
   const nameParts = at(150, 230)
-    .filter((item) => item.y >= code.y && !/Paciente:/i.test(item.text))
+    .filter((item) => !/Paciente:/i.test(item.text))
     .map((item) => compactName(item.text));
   const birth = at(225, 295).map((item) => extractSpacedDates(item.text)[0]).find(Boolean) ?? null;
   const phone = at(490, 560).flatMap((item) => extractPhones(normalizeSisregSpacing(item.text)));
