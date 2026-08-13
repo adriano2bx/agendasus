@@ -29,5 +29,22 @@ describe('parser SISREG', () => {
     assert.equal(result.rows[0]?.codigoConvocacaoOrigem, '658150259');
     assert.ok(result.warnings.some((warning) => warning.includes('5 páginas')));
   });
-});
 
+  it('não confunde o código do procedimento com o código da convocação', () => {
+    const result = parseSisregLines(
+      [
+        'SISREG',
+        '658150259 Unidade Solicitante: Data/Hora: 2 5 /0 3 /2 0 2 6 - 15:00',
+        'Procedimento(s): 01 - T O M O G RA FI A P O R E M I SSÃ O D E P Ó SI T RO N S (P E T-C T ) (0206010095) Paciente: A D RI A N A CNS: 700004773534 Nascimento: 24/12/1973 Telefone(s): (66) 99202-7503',
+        '658855556 Unidade Solicitante: Data/Hora: 3 0 /0 3 /2 0 2 6 - 15:00',
+        'Procedimento(s): PET-CT (0206010095) Paciente: M A RI A CNS: 700004773535 Nascimento: 01/01/1960 Telefone(s): (65) 99999-9999',
+      ],
+      1,
+    );
+    assert.equal(result.rows.length, 2);
+    assert.equal(result.rows[0]?.codigoConvocacaoOrigem, '658150259');
+    assert.equal(result.rows[0]?.dataNascimento, '24/12/1973');
+    assert.deepEqual(result.rows[0]?.telefones, ['(66)99202-7503']);
+    assert.equal(result.rows[0]?.procedimentos[0], 'TOMOGRAFIA POR EMISSÃO DE PÓSITRONS (PET-CT)');
+  });
+});
