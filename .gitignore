@@ -7,9 +7,9 @@ coverage
 .env.*
 !.env.example
 *.log
+*.tsbuildinfo
 tmp
 uploads
 apps/**/.next
 apps/**/dist
 packages/**/dist
-
