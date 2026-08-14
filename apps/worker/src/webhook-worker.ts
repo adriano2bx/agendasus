@@ -1,126 +1,323 @@
-import { ConvocationStage, prisma } from '@confirma/database';
-import { normalizeButtonAction } from '@confirma/domain';
+import { Prisma, prisma, type MessageStatus } from '@confirma/database';
 import type { Job } from 'bullmq';
 import type { ProcessWebhookJob } from '@confirma/queue';
+import {
+  asRecord,
+  eventDate,
+  eventType,
+  inboundContent,
+  nextMessageStatus,
+  providerMessageId,
+  providerWhatsAppId,
+  stringValue,
+  type JsonRecord,
+} from './gupshup-webhook.js';
+
+const TERMINAL_CONVOCATION_STATUSES = ['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE'];
 
 export async function processWebhook(job: Job<ProcessWebhookJob>): Promise<void> {
-  const event = await prisma.messageEvent.findUniqueOrThrow({ where: { id: job.data.messageEventId } });
+  const event = await prisma.messageEvent.findUniqueOrThrow({
+    where: { id: job.data.messageEventId },
+  });
   if (event.processingStatus === 'PROCESSED' || event.processingStatus === 'IGNORED') return;
+
   const envelope = asRecord(event.payload);
-  const type = stringValue(envelope.type);
+  const type = eventType(envelope);
   const payload = asRecord(envelope.payload);
-  const providerMessageId = stringValue(payload.gsId) ?? stringValue(payload.id) ?? contextGsId(payload) ?? event.providerMessageId;
+  const messageId = providerMessageId(envelope) ?? event.providerMessageId;
+  const occurredAt = eventDate(envelope, event.receivedAt);
 
   try {
-    if (type === 'message-event') await processMessageEvent(event.id, payload, providerMessageId);
-    else if (type === 'message') await processInboundMessage(event.id, payload, providerMessageId);
-    else if (type === 'billing-event' || type === 'billing') await processBillingEvent(event.id, payload, providerMessageId);
-    else await mark(event.id, 'IGNORED');
+    if (type === 'message-event') {
+      await processMessageEvent(event.id, envelope, payload, messageId, occurredAt);
+    } else if (type === 'message') {
+      await processInboundMessage(event.id, envelope, messageId, occurredAt);
+    } else if (type === 'billing-event' || type === 'billing') {
+      await processBillingEvent(event.id, payload, messageId, occurredAt);
+    } else {
+      await mark(event.id, 'IGNORED');
+    }
   } catch (error) {
     await prisma.messageEvent.update({
       where: { id: event.id },
-      data: { processingStatus: 'FAILED', processingError: error instanceof Error ? error.message.slice(0, 500) : 'Erro desconhecido' },
+      data: {
+        processingStatus: 'FAILED',
+        processingError: error instanceof Error ? error.message.slice(0, 500) : 'Erro desconhecido',
+      },
     });
     throw error;
   }
 }
 
-async function processBillingEvent(eventId: string, payload: Record<string, unknown>, providerMessageId: string | null) {
-  if (!providerMessageId) return mark(eventId, 'IGNORED');
-  const message = await prisma.message.findFirst({ where: { providerMessageId } });
+async function processBillingEvent(
+  eventId: string,
+  payload: JsonRecord,
+  messageProviderId: string | null,
+  occurredAt: Date,
+) {
+  if (!messageProviderId) return mark(eventId, 'IGNORED');
+  const message = await findMessage(messageProviderId, stringValue(payload.id));
   if (!message) return mark(eventId, 'IGNORED');
   const details = asRecord(payload.payload);
   const cost = decimalValue(details.cost) ?? decimalValue(payload.cost);
   const currency = stringValue(details.currency) ?? stringValue(payload.currency);
   const category = stringValue(details.category) ?? stringValue(asRecord(details.pricing).category);
-  const providerEventId = stringValue(payload.id);
-  if (!providerEventId) return mark(eventId, 'IGNORED');
+  const billingProviderEventId = stringValue(payload.id);
+  if (!billingProviderEventId) return mark(eventId, 'IGNORED');
+
   await prisma.$transaction(async (transaction) => {
     await transaction.billingEvent.upsert({
-      where: { providerEventId },
+      where: { providerEventId: billingProviderEventId },
       update: {},
-      create: { messageId: message.id, providerMessageId, providerEventId, billable: cost !== null, category, status: stringValue(details.status), cost, currency, billingAt: new Date() },
+      create: {
+        messageId: message.id,
+        providerMessageId: messageProviderId,
+        providerEventId: billingProviderEventId,
+        billable: cost !== null,
+        category,
+        status: stringValue(details.status),
+        cost,
+        currency,
+        billingAt: occurredAt,
+      },
     });
-    await transaction.messageEvent.update({ where: { id: eventId }, data: { messageId: message.id, processingStatus: 'PROCESSED', processedAt: new Date() } });
+    await completeEvent(transaction, eventId, message.id);
   });
 }
 
-async function processMessageEvent(eventId: string, payload: Record<string, unknown>, providerMessageId: string | null) {
+async function processMessageEvent(
+  eventId: string,
+  envelope: JsonRecord,
+  payload: JsonRecord,
+  messageProviderId: string | null,
+  occurredAt: Date,
+) {
   const statusType = stringValue(payload.type)?.toLowerCase();
-  if (!providerMessageId || !statusType) return mark(eventId, 'IGNORED');
-  const message = await prisma.message.findFirst({ where: { providerMessageId } });
+  const whatsAppId = providerWhatsAppId(envelope);
+  if (!messageProviderId || !statusType) return mark(eventId, 'IGNORED');
+  const message = await findMessage(messageProviderId, whatsAppId);
   if (!message) return mark(eventId, 'IGNORED');
-  const now = new Date();
-  const details = asRecord(payload.payload);
+  const update = statusUpdate(statusType, occurredAt, asRecord(payload.payload));
+  if (!update) return mark(eventId, 'IGNORED', message.id);
 
   await prisma.$transaction(async (transaction) => {
-    const data = statusUpdate(statusType, now, details);
-    if (!data) return transaction.messageEvent.update({ where: { id: eventId }, data: { messageId: message.id, processingStatus: 'IGNORED', processedAt: now } });
-    await transaction.message.update({ where: { id: message.id }, data });
-    await transaction.messageEvent.update({ where: { id: eventId }, data: { messageId: message.id, processingStatus: 'PROCESSED', processedAt: now } });
+    await lockRow(transaction, 'messages', message.id);
+    const current = await transaction.message.findUniqueOrThrow({ where: { id: message.id } });
+    const status = nextMessageStatus(current.status, update.status) as MessageStatus;
+    await transaction.message.update({
+      where: { id: message.id },
+      data: {
+        status,
+        ...(update.status === 'SUBMITTED' && whatsAppId ? { providerWhatsAppId: whatsAppId } : {}),
+        ...(update.status === 'SENT' ? { sentAt: current.sentAt ?? occurredAt } : {}),
+        ...(update.status === 'DELIVERED'
+          ? { deliveredAt: current.deliveredAt ?? occurredAt }
+          : {}),
+        ...(update.status === 'READ'
+          ? {
+              readAt: current.readAt ?? occurredAt,
+              deliveredAt: current.deliveredAt ?? occurredAt,
+            }
+          : {}),
+        ...(update.status === 'FAILED' && status === 'FAILED'
+          ? {
+              failedAt: current.failedAt ?? occurredAt,
+              failureCode: update.failureCode,
+              failureReason: update.failureReason,
+            }
+          : {}),
+      },
+    });
+    await completeEvent(transaction, eventId, message.id);
   });
 }
 
-async function processInboundMessage(eventId: string, payload: Record<string, unknown>, providerMessageId: string | null) {
-  const content = asRecord(payload.payload);
-  const text = stringValue(content.text) ?? '';
-  const action = content.type === 'button' ? normalizeButtonAction(text) : 'UNKNOWN';
-  const message = providerMessageId ? await prisma.message.findFirst({ where: { providerMessageId } }) : null;
-  const now = new Date();
+async function processInboundMessage(
+  eventId: string,
+  envelope: JsonRecord,
+  messageProviderId: string | null,
+  occurredAt: Date,
+) {
+  const content = inboundContent(envelope);
+  const message = await findInboundMessage(messageProviderId, content.source);
   if (!message) return mark(eventId, 'IGNORED');
 
   await prisma.$transaction(async (transaction) => {
-    const convocation = await transaction.convocation.findUniqueOrThrow({ where: { id: message.convocationId } });
-    const terminal = ['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE'].includes(convocation.status);
+    await lockRow(transaction, 'convocations', message.convocationId);
+    const convocation = await transaction.convocation.findUniqueOrThrow({
+      where: { id: message.convocationId },
+    });
+    const terminal = TERMINAL_CONVOCATION_STATUSES.includes(convocation.status);
+    const responseAction = content.isButton
+      ? content.action === 'CONFIRM'
+        ? 'CONFIRM'
+        : content.action === 'CANCEL'
+          ? 'CANCEL'
+          : 'UNKNOWN'
+      : 'FREE_TEXT';
+
     await transaction.messageResponse.create({
       data: {
         messageId: message.id,
         convocationId: convocation.id,
-        action: action === 'CONFIRM' ? 'CONFIRM' : action === 'CANCEL' ? 'CANCEL' : 'FREE_TEXT',
+        action: responseAction,
         sourceStage: message.stage,
-        rawText: text.slice(0, 1_000),
-        receivedAt: now,
+        rawText: content.text.slice(0, 1_000),
+        receivedAt: occurredAt,
       },
     });
-    if (!terminal && action !== 'UNKNOWN') {
+
+    await transaction.auditLog.create({
+      data: {
+        eventType: 'PATIENT_RESPONSE_RECEIVED',
+        entityType: 'convocation',
+        entityId: convocation.id,
+        metadata: {
+          action: responseAction,
+          sourceStage: message.stage,
+          messageId: message.id,
+          matchedBy: messageProviderId ? 'PROVIDER_MESSAGE_ID' : 'SOURCE_PHONE',
+        },
+      },
+    });
+
+    if (!terminal && (content.action === 'CONFIRM' || content.action === 'CANCEL')) {
       await transaction.convocation.update({
         where: { id: convocation.id },
-        data: action === 'CONFIRM'
-          ? { status: 'CONFIRMED', confirmedAt: now, nextActionAt: null, stage: 'FINISHED' }
-          : { status: 'CANCELLED', cancelledAt: now, nextActionAt: null, stage: 'FINISHED' },
+        data:
+          content.action === 'CONFIRM'
+            ? {
+                status: 'CONFIRMED',
+                confirmedAt: occurredAt,
+                nextActionAt: null,
+                stage: 'FINISHED',
+                version: { increment: 1 },
+              }
+            : {
+                status: 'CANCELLED',
+                cancelledAt: occurredAt,
+                nextActionAt: null,
+                stage: 'FINISHED',
+                version: { increment: 1 },
+              },
       });
       await transaction.auditLog.create({
-        data: { eventType: action === 'CONFIRM' ? 'PATIENT_CONFIRMED' : 'PATIENT_CANCELLED', entityType: 'convocation', entityId: convocation.id, metadata: { sourceStage: message.stage, messageId: message.id } },
+        data: {
+          eventType: content.action === 'CONFIRM' ? 'PATIENT_CONFIRMED' : 'PATIENT_CANCELLED',
+          entityType: 'convocation',
+          entityId: convocation.id,
+          metadata: { sourceStage: message.stage, messageId: message.id },
+        },
       });
-      if (action === 'CONFIRM' && process.env.HANDOFF_MODE === 'LIVE') {
+      if (content.action === 'CONFIRM' && process.env.HANDOFF_MODE === 'LIVE') {
         await transaction.handoffEvent.upsert({
           where: { convocationId: convocation.id },
           update: {},
           create: {
             convocationId: convocation.id,
             idempotencyKey: `handoff:${convocation.id}`,
-            payload: { trigger: 'PATIENT_CONFIRMED', sourceStage: message.stage, confirmedAt: now.toISOString() },
+            payload: {
+              trigger: 'PATIENT_CONFIRMED',
+              sourceStage: message.stage,
+              confirmedAt: occurredAt.toISOString(),
+            },
           },
         });
       }
     }
-    await transaction.messageEvent.update({ where: { id: eventId }, data: { messageId: message.id, processingStatus: 'PROCESSED', processedAt: now } });
+    await completeEvent(transaction, eventId, message.id);
   });
 }
 
-function statusUpdate(status: string, at: Date, details: Record<string, unknown>) {
-  if (status === 'enqueued') return { status: 'SUBMITTED' as const };
-  if (status === 'sent') return { status: 'SENT' as const, sentAt: at };
-  if (status === 'delivered') return { status: 'DELIVERED' as const, deliveredAt: at };
-  if (status === 'read') return { status: 'READ' as const, readAt: at };
-  if (status === 'failed') return { status: 'FAILED' as const, failedAt: at, failureCode: stringValue(details.code) ?? 'GUPSHUP_FAILED', failureReason: stringValue(details.reason) ?? 'Falha reportada pelo provedor' };
+async function findInboundMessage(messageProviderId: string | null, source: string | null) {
+  if (messageProviderId) {
+    const correlated = await findMessage(messageProviderId, null);
+    if (correlated) return correlated;
+  }
+  if (!source) return null;
+  return prisma.message.findFirst({
+    where: { phone: source },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+async function findMessage(messageProviderId: string, whatsAppId: string | null) {
+  return prisma.message.findFirst({
+    where: {
+      OR: [
+        { providerMessageId: messageProviderId },
+        { providerWhatsAppId: messageProviderId },
+        ...(whatsAppId
+          ? [{ providerMessageId: whatsAppId }, { providerWhatsAppId: whatsAppId }]
+          : []),
+      ],
+    },
+  });
+}
+
+function statusUpdate(status: string, at: Date, details: JsonRecord) {
+  if (status === 'enqueued') return { status: 'SUBMITTED' as const, at };
+  if (status === 'sent') return { status: 'SENT' as const, at };
+  if (status === 'delivered') return { status: 'DELIVERED' as const, at };
+  if (status === 'read') return { status: 'READ' as const, at };
+  if (status === 'failed') {
+    return {
+      status: 'FAILED' as const,
+      at,
+      failureCode: textValue(details.code) ?? 'GUPSHUP_FAILED',
+      failureReason: textValue(details.reason) ?? 'Falha reportada pelo provedor',
+    };
+  }
   return null;
 }
 
-async function mark(eventId: string, status: 'PROCESSED' | 'IGNORED') {
-  await prisma.messageEvent.update({ where: { id: eventId }, data: { processingStatus: status, processedAt: new Date() } });
+async function lockRow(
+  transaction: Prisma.TransactionClient,
+  table: 'messages' | 'convocations',
+  id: string,
+) {
+  if (table === 'messages') {
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT id FROM messages WHERE id = ${id}::uuid FOR UPDATE`,
+    );
+  } else {
+    await transaction.$queryRaw(
+      Prisma.sql`SELECT id FROM convocations WHERE id = ${id}::uuid FOR UPDATE`,
+    );
+  }
 }
-function asRecord(value: unknown): Record<string, unknown> { return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
-function stringValue(value: unknown): string | null { return typeof value === 'string' && value ? value : null; }
-function decimalValue(value: unknown): string | null { return typeof value === 'number' && Number.isFinite(value) ? String(value) : typeof value === 'string' && /^\d+(\.\d+)?$/.test(value) ? value : null; }
-function contextGsId(payload: Record<string, unknown>): string | null { return stringValue(asRecord(payload.context).gsId); }
+
+async function completeEvent(
+  transaction: Prisma.TransactionClient,
+  eventId: string,
+  messageId: string,
+) {
+  await transaction.messageEvent.update({
+    where: { id: eventId },
+    data: { messageId, processingStatus: 'PROCESSED', processedAt: new Date() },
+  });
+}
+
+async function mark(eventId: string, status: 'PROCESSED' | 'IGNORED', messageId?: string) {
+  await prisma.messageEvent.update({
+    where: { id: eventId },
+    data: {
+      ...(messageId ? { messageId } : {}),
+      processingStatus: status,
+      processedAt: new Date(),
+    },
+  });
+}
+
+function decimalValue(value: unknown): string | null {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? String(value)
+    : typeof value === 'string' && /^\d+(\.\d+)?$/.test(value)
+      ? value
+      : null;
+}
+
+function textValue(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return stringValue(value);
+}

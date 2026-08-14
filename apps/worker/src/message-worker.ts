@@ -16,14 +16,18 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
       where: { id: job.data.convocationId },
       include: { campaign: true, patient: { include: { phones: true } } },
     });
-    if (!convocation || !['SCHEDULED', 'RUNNING'].includes(convocation.campaign.status)) return null;
+    if (!convocation || !['SCHEDULED', 'RUNNING'].includes(convocation.campaign.status))
+      return null;
     if (convocation.status !== 'QUEUED' || convocation.stage !== job.data.stage) return null;
 
     const stage = stageToMessageStage(convocation.stage);
-    const phone = convocation.patient.phones.find((item) => item.selectedForWhatsApp && item.valid && item.mobile);
+    const phone = convocation.patient.phones.find(
+      (item) => item.selectedForWhatsApp && item.valid && item.mobile,
+    );
     if (!stage || !phone) {
       await transaction.convocation.update({
-        where: { id: convocation.id }, data: { status: 'SEND_ERROR', nextActionAt: null },
+        where: { id: convocation.id },
+        data: { status: 'SEND_ERROR', nextActionAt: null },
       });
       return null;
     }
@@ -36,7 +40,13 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
 
     const template = templateForStage(stage);
     const message = await transaction.message.upsert({
-      where: { convocationId_stage_attemptNumber: { convocationId: convocation.id, stage: convocation.stage, attemptNumber: stage === 'FIRST' ? 1 : stage === 'SECOND' ? 2 : 3 } },
+      where: {
+        convocationId_stage_attemptNumber: {
+          convocationId: convocation.id,
+          stage: convocation.stage,
+          attemptNumber: stage === 'FIRST' ? 1 : stage === 'SECOND' ? 2 : 3,
+        },
+      },
       update: { status: 'PROCESSING', failureCode: null, failureReason: null, failedAt: null },
       create: {
         convocationId: convocation.id,
@@ -64,17 +74,26 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
       });
       const stage = stageToMessageStage(message.stage);
       if (!stage) throw new Error('Etapa de mensagem inválida');
-      providerMessageId = (await sendGupshupTemplate({
-        destination: message.phone,
-        stage,
-        templateId: message.templateId,
-        patientName: message.convocation.patient.displayName,
-      })).providerMessageId;
+      providerMessageId = (
+        await sendGupshupTemplate({
+          destination: message.phone,
+          stage,
+          templateId: message.templateId,
+          patientName: message.convocation.patient.displayName,
+        })
+      ).providerMessageId;
     } else {
-      throw new GupshupRequestError('MESSAGING_MODE deve ser DRY_RUN ou LIVE.', 'INVALID_MODE', false);
+      throw new GupshupRequestError(
+        'MESSAGING_MODE deve ser DRY_RUN ou LIVE.',
+        'INVALID_MODE',
+        false,
+      );
     }
   } catch (error) {
-    const providerError = error instanceof GupshupRequestError ? error : new GupshupRequestError('Falha inesperada ao enviar.', 'UNKNOWN', true);
+    const providerError =
+      error instanceof GupshupRequestError
+        ? error
+        : new GupshupRequestError('Falha inesperada ao enviar.', 'UNKNOWN', true);
     await prisma.$transaction(async (transaction) => {
       await transaction.message.update({
         where: { id: created.messageId },
@@ -85,9 +104,11 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
           failureReason: providerError.message,
         },
       });
-      await transaction.convocation.update({
-        where: { id: created.convocationId },
-        data: providerError.retryable ? { status: 'QUEUED' } : { status: 'SEND_ERROR', nextActionAt: null },
+      await transaction.convocation.updateMany({
+        where: { id: created.convocationId, status: 'PROCESSING' },
+        data: providerError.retryable
+          ? { status: 'QUEUED' }
+          : { status: 'SEND_ERROR', nextActionAt: null },
       });
     });
     if (providerError.retryable) throw providerError;
@@ -117,8 +138,8 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
         processedAt: submittedAt,
       },
     });
-    await transaction.convocation.update({
-      where: { id: created.convocationId },
+    await transaction.convocation.updateMany({
+      where: { id: created.convocationId, status: 'PROCESSING' },
       data: next
         ? { status: 'WAITING_RESPONSE', stage: next.stage, nextActionAt: next.at }
         : { status: 'WAITING_RESPONSE', nextActionAt: null },

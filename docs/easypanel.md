@@ -2,11 +2,11 @@
 
 Crie serviços separados a partir do mesmo repositório Git:
 
-| Serviço | Dockerfile | Porta | Réplicas |
-| --- | --- | ---: | ---: |
-| `confirma-web` | `docker/Dockerfile.web` | 3000 | 1 |
-| `confirma-api` | `docker/Dockerfile.api` | 3001 | 1 |
-| `confirma-worker` | `docker/Dockerfile.worker` | — | 1 inicialmente |
+| Serviço           | Dockerfile                 | Porta |       Réplicas |
+| ----------------- | -------------------------- | ----: | -------------: |
+| `confirma-web`    | `docker/Dockerfile.web`    |  3000 |              1 |
+| `confirma-api`    | `docker/Dockerfile.api`    |  3001 |              1 |
+| `confirma-worker` | `docker/Dockerfile.worker` |     — | 1 inicialmente |
 
 Configure um serviço PostgreSQL e um Redis pelo catálogo do EasyPanel. Não exponha as portas desses serviços publicamente. Use os endereços internos que o EasyPanel fornecer em `DATABASE_URL` e `REDIS_URL`.
 
@@ -41,7 +41,6 @@ FINAL_RESPONSE_WINDOW_DAYS=1
 MESSAGE_RATE_LIMIT_MAX=20
 MESSAGE_RATE_LIMIT_DURATION_MS=1000
 TEMP_FILE_MAX_AGE_HOURS=24
-GUPSHUP_WEBHOOK_SECRET=<secret opcional para x-confirma-webhook-secret>
 HANDOFF_MODE=LIVE
 HANDOFF_WORKER_CONCURRENCY=3
 HANDOFF_MAX_ATTEMPTS=5
@@ -71,6 +70,9 @@ JWT_EXPIRES_IN=8h
 ADMIN_NAME=Administrador
 ADMIN_EMAIL=<e-mail de acesso>
 ADMIN_PASSWORD=<senha forte com ao menos 12 caracteres>
+# Deixe vazio ao receber a Gupshup diretamente. Preencha somente se um proxy
+# confiável inserir o cabeçalho x-confirma-webhook-secret antes da API.
+GUPSHUP_WEBHOOK_SECRET=
 ```
 
 A API aplica as migrations e cria/atualiza automaticamente o administrador a cada inicialização. A senha é lida somente de `ADMIN_PASSWORD`; assim, alterar essa variável e reiniciar a API faz a rotação sem seed, terminal ou comando manual.
@@ -80,7 +82,7 @@ A API aplica as migrations e cria/atualiza automaticamente o administrador a cad
 1. Crie PostgreSQL e Redis.
 2. Crie API, web e worker pelo Git, configure as variáveis e publique. Não há comandos de bootstrap a executar: a API aplica migrations e provisiona o login automaticamente.
 3. Publique inicialmente o worker com `MESSAGING_MODE=DRY_RUN` e `HANDOFF_MODE=DISABLED`.
-4. Configure na Gupshup o callback público: `https://api.seu-dominio.com/api/webhooks/gupshup`, habilitando `sent`, `delivered`, `read`, `failed` e mensagens recebidas.
+4. Configure na Gupshup o callback público: `https://api.seu-dominio.com/api/webhooks/gupshup`, habilitando `enqueued`, `sent`, `delivered`, `read`, `failed`, eventos de cobrança e mensagens recebidas.
 5. Faça uma campanha de homologação e confira banco, filas e painel.
 6. Quando aprovado, altere as duas chaves de modo para `MESSAGING_MODE=LIVE` e `HANDOFF_MODE=LIVE`; o EasyPanel reinicia os containers automaticamente.
 
@@ -91,4 +93,6 @@ A API aplica as migrations e cria/atualiza automaticamente o administrador a cad
 - Mantenha `DRY_RUN` até concluir a homologação do webhook.
 - Configure os valores `VIEW_EASYSAC_*` apenas como secrets do worker. Uma confirmação por botão cria um único transbordo idempotente, contendo o resumo do paciente e das solicitações; erros são reprocessados automaticamente até o limite configurado.
 - Ative HTTPS no domínio API antes de registrar o webhook.
+- Não configure `GUPSHUP_WEBHOOK_SECRET` esperando que a Gupshup envie esse cabeçalho. A variável serve somente quando um proxy reverso confiável o adiciona. Para chamadas diretas da Gupshup, mantenha-a vazia e restrinja a origem no proxy/firewall pelos IPs oficiais fornecidos pelo suporte da Gupshup.
+- O endpoint valida também o campo `app` do payload contra `GUPSHUP_APP_NAME`, persiste o evento e responde `HTTP 204` antes de o worker executar as regras de negócio.
 - Faça backup externo recorrente do PostgreSQL antes do piloto.

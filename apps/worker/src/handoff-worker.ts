@@ -24,7 +24,11 @@ export async function processHandoff(job: Job<ProcessHandoffJob>): Promise<void>
   if (!handoffEnabled()) {
     await prisma.handoffEvent.update({
       where: { id: event.id },
-      data: { status: 'FAILED', failureReason: 'Transbordo desabilitado pela configuração do ambiente', nextAttemptAt: null },
+      data: {
+        status: 'FAILED',
+        failureReason: 'Transbordo desabilitado pela configuração do ambiente',
+        nextAttemptAt: null,
+      },
     });
     return;
   }
@@ -47,10 +51,22 @@ export async function processHandoff(job: Job<ProcessHandoffJob>): Promise<void>
     await prisma.$transaction([
       prisma.handoffEvent.update({
         where: { id: event.id },
-        data: { status: 'SUBMITTED', attempts: { increment: 1 }, nextAttemptAt: null, submittedAt: new Date(), responsePayload: responsePayload === null ? Prisma.JsonNull : responsePayload as Prisma.InputJsonValue },
+        data: {
+          status: 'SUBMITTED',
+          attempts: { increment: 1 },
+          nextAttemptAt: null,
+          submittedAt: new Date(),
+          responsePayload:
+            responsePayload === null ? Prisma.JsonNull : (responsePayload as Prisma.InputJsonValue),
+        },
       }),
       prisma.auditLog.create({
-        data: { eventType: 'PATIENT_HANDOFF_SUBMITTED', entityType: 'convocation', entityId: event.convocationId, metadata: { handoffEventId: event.id } },
+        data: {
+          eventType: 'PATIENT_HANDOFF_SUBMITTED',
+          entityType: 'convocation',
+          entityId: event.convocationId,
+          metadata: { handoffEventId: event.id },
+        },
       }),
     ]);
   } catch (error) {
@@ -64,19 +80,31 @@ export async function processHandoff(job: Job<ProcessHandoffJob>): Promise<void>
         status: finalFailure ? 'FAILED' : 'PENDING',
         attempts,
         nextAttemptAt: finalFailure ? null : new Date(Date.now() + delay),
-        failureReason: error instanceof Error ? error.message.slice(0, 500) : 'Erro desconhecido no transbordo',
+        failureReason:
+          error instanceof Error ? error.message.slice(0, 500) : 'Erro desconhecido no transbordo',
       },
     });
     if (finalFailure) {
       await prisma.auditLog.create({
-        data: { eventType: 'PATIENT_HANDOFF_FAILED', entityType: 'convocation', entityId: event.convocationId, metadata: { handoffEventId: event.id, attempts } },
+        data: {
+          eventType: 'PATIENT_HANDOFF_FAILED',
+          entityType: 'convocation',
+          entityId: event.convocationId,
+          metadata: { handoffEventId: event.id, attempts },
+        },
       });
     }
   }
 }
 
 function requiredConfiguration() {
-  const keys = ['VIEW_EASYSAC_WEBHOOK', 'VIEW_EASYSAC_ORG_ID', 'VIEW_EASYSAC_APP_KEY', 'VIEW_EASYSAC_CHANNEL_ID', 'VIEW_EASYSAC_QUEUE_ID'] as const;
+  const keys = [
+    'VIEW_EASYSAC_WEBHOOK',
+    'VIEW_EASYSAC_ORG_ID',
+    'VIEW_EASYSAC_APP_KEY',
+    'VIEW_EASYSAC_CHANNEL_ID',
+    'VIEW_EASYSAC_QUEUE_ID',
+  ] as const;
   const missing = keys.filter((key) => !process.env[key]);
   if (missing.length) throw new Error(`Configuração de transbordo ausente: ${missing.join(', ')}`);
   return {
@@ -91,10 +119,11 @@ function requiredConfiguration() {
 
 function createPayload(event: any, config: ReturnType<typeof requiredConfiguration>) {
   const { convocation } = event;
-  const phone = convocation.messages.at(-1)?.phone
-    ?? convocation.patient.phones.find((item: any) => item.selectedForWhatsApp)?.normalizedValue
-    ?? convocation.patient.phones.find((item: any) => item.valid)?.normalizedValue
-    ?? '';
+  const phone =
+    convocation.messages.at(-1)?.phone ??
+    convocation.patient.phones.find((item: any) => item.selectedForWhatsApp)?.normalizedValue ??
+    convocation.patient.phones.find((item: any) => item.valid)?.normalizedValue ??
+    '';
   const records = convocation.records.map(({ sourceRecord }: any) => ({
     codigo: sourceRecord.codigoConvocacaoOrigem,
     dataHora: sourceRecord.scheduledAt.toISOString(),
@@ -109,8 +138,13 @@ function createPayload(event: any, config: ReturnType<typeof requiredConfigurati
     `Campanha: ${convocation.campaign.name}`,
     '',
     'Solicitações:',
-    ...records.map((record: any) => `• Código ${record.codigo} | ${formatDateTime(record.dataHora)} | ${record.procedimentos.join(', ') || 'Sem procedimento informado'}`),
-  ].filter(Boolean).join('\n');
+    ...records.map(
+      (record: any) =>
+        `• Código ${record.codigo} | ${formatDateTime(record.dataHora)} | ${record.procedimentos.join(', ') || 'Sem procedimento informado'}`,
+    ),
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   return {
     orgId: config.orgId,
@@ -118,7 +152,7 @@ function createPayload(event: any, config: ReturnType<typeof requiredConfigurati
     channelId: config.channelId,
     queueId: config.queueId,
     channelType: config.channelType,
-    createdAt: new Date().toISOString(),
+    createdAt: formatZonedIso(new Date(), process.env.APP_TIMEZONE ?? 'America/Sao_Paulo'),
     mobile: phone,
     name: convocation.patient.displayName,
     photo: null,
@@ -131,7 +165,53 @@ function createPayload(event: any, config: ReturnType<typeof requiredConfigurati
 
 async function responseBody(response: Response): Promise<unknown> {
   const text = (await response.text()).slice(0, 10_000);
-  try { return JSON.parse(text); } catch { return text || null; }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text || null;
+  }
 }
-function formatDate(value: Date): string { return new Intl.DateTimeFormat('pt-BR', { timeZone: process.env.APP_TIMEZONE ?? 'America/Sao_Paulo' }).format(value); }
-function formatDateTime(value: string): string { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: process.env.APP_TIMEZONE ?? 'America/Sao_Paulo' }).format(new Date(value)); }
+function formatDate(value: Date): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    timeZone: process.env.APP_TIMEZONE ?? 'America/Sao_Paulo',
+  }).format(value);
+}
+function formatDateTime(value: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+    timeZone: process.env.APP_TIMEZONE ?? 'America/Sao_Paulo',
+  }).format(new Date(value));
+}
+
+function formatZonedIso(value: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const parts = Object.fromEntries(
+    formatter
+      .formatToParts(value)
+      .filter(({ type }) => type !== 'literal')
+      .map(({ type, value: part }) => [type, part]),
+  );
+  const localAsUtc = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second),
+  );
+  const offsetMinutes = Math.round((localAsUtc - value.getTime()) / 60_000);
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const absoluteOffset = Math.abs(offsetMinutes);
+  const offset = `${sign}${String(Math.floor(absoluteOffset / 60)).padStart(2, '0')}:${String(absoluteOffset % 60).padStart(2, '0')}`;
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}.${String(value.getMilliseconds()).padStart(3, '0')}${offset}`;
+}

@@ -101,37 +101,37 @@ model User {
 }
 
 model Import {
-  id                 String       @id @default(uuid()) @db.Uuid
-  status             ImportStatus @default(UPLOADED)
-  layout             String?
-  totalReported      Int?         @map("total_reported")
-  recordsFound       Int          @default(0) @map("records_found")
-  validationSummary Json?         @map("validation_summary")
-  warnings           Json?
-  failureReason      String?      @map("failure_reason")
-  approvedAt         DateTime?    @map("approved_at") @db.Timestamptz(3)
-  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  files              ImportFile[]
-  rows               ImportRow[]
-  sourceRecords      SourceRecord[]
-  campaigns          Campaign[]
+  id                String         @id @default(uuid()) @db.Uuid
+  status            ImportStatus   @default(UPLOADED)
+  layout            String?
+  totalReported     Int?           @map("total_reported")
+  recordsFound      Int            @default(0) @map("records_found")
+  validationSummary Json?          @map("validation_summary")
+  warnings          Json?
+  failureReason     String?        @map("failure_reason")
+  approvedAt        DateTime?      @map("approved_at") @db.Timestamptz(3)
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  files             ImportFile[]
+  rows              ImportRow[]
+  sourceRecords     SourceRecord[]
+  campaigns         Campaign[]
 
   @@index([status, createdAt])
   @@map("imports")
 }
 
 model ImportFile {
-  id           String   @id @default(uuid()) @db.Uuid
-  importId     String   @map("import_id") @db.Uuid
-  originalName String   @map("original_name")
-  mimeType     String   @map("mime_type")
-  sizeBytes    Int      @map("size_bytes")
+  id           String      @id @default(uuid()) @db.Uuid
+  importId     String      @map("import_id") @db.Uuid
+  originalName String      @map("original_name")
+  mimeType     String      @map("mime_type")
+  sizeBytes    Int         @map("size_bytes")
   checksum     String
-  temporaryKey String?  @map("temporary_key")
-  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  import       Import   @relation(fields: [importId], references: [id], onDelete: Cascade)
+  temporaryKey String?     @map("temporary_key")
+  deletedAt    DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  import       Import      @relation(fields: [importId], references: [id], onDelete: Cascade)
   rows         ImportRow[]
 
   @@index([importId])
@@ -174,15 +174,15 @@ model Patient {
 }
 
 model PatientPhone {
-  id               String   @id @default(uuid()) @db.Uuid
-  patientId        String   @map("patient_id") @db.Uuid
-  originalValue    String   @map("original_value")
-  normalizedValue  String   @map("normalized_value")
-  valid             Boolean
-  mobile            Boolean
-  selectedForWhatsApp Boolean @default(false) @map("selected_for_whatsapp")
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  patient           Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(uuid()) @db.Uuid
+  patientId           String   @map("patient_id") @db.Uuid
+  originalValue       String   @map("original_value")
+  normalizedValue     String   @map("normalized_value")
+  valid               Boolean
+  mobile              Boolean
+  selectedForWhatsApp Boolean  @default(false) @map("selected_for_whatsapp")
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  patient             Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@unique([patientId, normalizedValue])
   @@index([normalizedValue])
@@ -212,16 +212,16 @@ model Campaign {
 }
 
 model SourceRecord {
-  id                      String      @id @default(uuid()) @db.Uuid
-  importId                String      @map("import_id") @db.Uuid
-  importRowId             String      @unique @map("import_row_id") @db.Uuid
-  codigoConvocacaoOrigem  String      @map("codigo_convocacao_origem")
-  scheduledAt             DateTime    @map("scheduled_at") @db.Timestamptz(3)
-  createdAt               DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-  import                  Import      @relation(fields: [importId], references: [id])
-  importRow               ImportRow   @relation(fields: [importRowId], references: [id])
-  procedures              Procedure[]
-  convocations            ConvocationRecord[]
+  id                     String              @id @default(uuid()) @db.Uuid
+  importId               String              @map("import_id") @db.Uuid
+  importRowId            String              @unique @map("import_row_id") @db.Uuid
+  codigoConvocacaoOrigem String              @map("codigo_convocacao_origem")
+  scheduledAt            DateTime            @map("scheduled_at") @db.Timestamptz(3)
+  createdAt              DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  import                 Import              @relation(fields: [importId], references: [id])
+  importRow              ImportRow           @relation(fields: [importRowId], references: [id])
+  procedures             Procedure[]
+  convocations           ConvocationRecord[]
 
   @@index([importId])
   @@index([codigoConvocacaoOrigem])
@@ -240,24 +240,24 @@ model Procedure {
 }
 
 model Convocation {
-  id             String             @id @default(uuid()) @db.Uuid
-  campaignId     String             @map("campaign_id") @db.Uuid
-  patientId      String             @map("patient_id") @db.Uuid
-  stage          ConvocationStage   @default(FIRST)
-  status         ConvocationStatus  @default(SCHEDULED)
-  nextActionAt   DateTime?          @map("next_action_at") @db.Timestamptz(3)
-  confirmedAt    DateTime?          @map("confirmed_at") @db.Timestamptz(3)
-  cancelledAt    DateTime?          @map("cancelled_at") @db.Timestamptz(3)
-  finishedAt     DateTime?          @map("finished_at") @db.Timestamptz(3)
-  version        Int                @default(0)
-  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  campaign       Campaign           @relation(fields: [campaignId], references: [id])
-  patient        Patient            @relation(fields: [patientId], references: [id])
-  records        ConvocationRecord[]
-  messages       Message[]
-  responses      MessageResponse[]
-  handoff        HandoffEvent?
+  id           String              @id @default(uuid()) @db.Uuid
+  campaignId   String              @map("campaign_id") @db.Uuid
+  patientId    String              @map("patient_id") @db.Uuid
+  stage        ConvocationStage    @default(FIRST)
+  status       ConvocationStatus   @default(SCHEDULED)
+  nextActionAt DateTime?           @map("next_action_at") @db.Timestamptz(3)
+  confirmedAt  DateTime?           @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt  DateTime?           @map("cancelled_at") @db.Timestamptz(3)
+  finishedAt   DateTime?           @map("finished_at") @db.Timestamptz(3)
+  version      Int                 @default(0)
+  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  campaign     Campaign            @relation(fields: [campaignId], references: [id])
+  patient      Patient             @relation(fields: [patientId], references: [id])
+  records      ConvocationRecord[]
+  messages     Message[]
+  responses    MessageResponse[]
+  handoff      HandoffEvent?
 
   @@unique([campaignId, patientId])
   @@index([status, nextActionAt])
@@ -285,39 +285,40 @@ model HandoffEvent {
 }
 
 model ConvocationRecord {
-  convocationId String       @map("convocation_id") @db.Uuid
-  sourceRecordId String      @map("source_record_id") @db.Uuid
-  convocation   Convocation  @relation(fields: [convocationId], references: [id], onDelete: Cascade)
-  sourceRecord  SourceRecord @relation(fields: [sourceRecordId], references: [id])
+  convocationId  String       @map("convocation_id") @db.Uuid
+  sourceRecordId String       @map("source_record_id") @db.Uuid
+  convocation    Convocation  @relation(fields: [convocationId], references: [id], onDelete: Cascade)
+  sourceRecord   SourceRecord @relation(fields: [sourceRecordId], references: [id])
 
   @@id([convocationId, sourceRecordId])
   @@map("convocation_records")
 }
 
 model Message {
-  id                String            @id @default(uuid()) @db.Uuid
-  convocationId     String            @map("convocation_id") @db.Uuid
-  stage             ConvocationStage
-  attemptNumber     Int               @map("attempt_number")
-  templateName      String            @map("template_name")
-  templateId        String            @map("template_id")
-  phone             String
-  status            MessageStatus     @default(QUEUED)
-  providerMessageId String?           @unique @map("provider_message_id")
-  idempotencyKey    String            @unique @map("idempotency_key")
-  submittedAt       DateTime?         @map("submitted_at") @db.Timestamptz(3)
-  sentAt            DateTime?         @map("sent_at") @db.Timestamptz(3)
-  deliveredAt       DateTime?         @map("delivered_at") @db.Timestamptz(3)
-  readAt            DateTime?         @map("read_at") @db.Timestamptz(3)
-  failedAt          DateTime?         @map("failed_at") @db.Timestamptz(3)
-  failureCode       String?           @map("failure_code")
-  failureReason     String?           @map("failure_reason")
-  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
-  convocation       Convocation       @relation(fields: [convocationId], references: [id])
-  events            MessageEvent[]
-  responses         MessageResponse[]
-  billingEvents     BillingEvent[]
+  id                 String            @id @default(uuid()) @db.Uuid
+  convocationId      String            @map("convocation_id") @db.Uuid
+  stage              ConvocationStage
+  attemptNumber      Int               @map("attempt_number")
+  templateName       String            @map("template_name")
+  templateId         String            @map("template_id")
+  phone              String
+  status             MessageStatus     @default(QUEUED)
+  providerMessageId  String?           @unique @map("provider_message_id")
+  providerWhatsAppId String?           @unique @map("provider_whatsapp_id")
+  idempotencyKey     String            @unique @map("idempotency_key")
+  submittedAt        DateTime?         @map("submitted_at") @db.Timestamptz(3)
+  sentAt             DateTime?         @map("sent_at") @db.Timestamptz(3)
+  deliveredAt        DateTime?         @map("delivered_at") @db.Timestamptz(3)
+  readAt             DateTime?         @map("read_at") @db.Timestamptz(3)
+  failedAt           DateTime?         @map("failed_at") @db.Timestamptz(3)
+  failureCode        String?           @map("failure_code")
+  failureReason      String?           @map("failure_reason")
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  convocation        Convocation       @relation(fields: [convocationId], references: [id])
+  events             MessageEvent[]
+  responses          MessageResponse[]
+  billingEvents      BillingEvent[]
 
   @@unique([convocationId, stage, attemptNumber])
   @@index([convocationId, createdAt])
@@ -329,7 +330,7 @@ model MessageEvent {
   id                String           @id @default(uuid()) @db.Uuid
   messageId         String?          @map("message_id") @db.Uuid
   providerMessageId String?          @map("provider_message_id")
-  providerEventId   String?          @unique @map("provider_event_id")
+  providerEventId   String?          @map("provider_event_id")
   eventType         String           @map("event_type")
   deduplicationKey  String           @unique @map("deduplication_key")
   receivedAt        DateTime         @default(now()) @map("received_at") @db.Timestamptz(3)
@@ -341,20 +342,21 @@ model MessageEvent {
 
   @@index([processingStatus, receivedAt])
   @@index([providerMessageId])
+  @@index([providerEventId])
   @@map("message_events")
 }
 
 model MessageResponse {
-  id             String             @id @default(uuid()) @db.Uuid
-  messageId      String?            @map("message_id") @db.Uuid
-  convocationId  String             @map("convocation_id") @db.Uuid
-  action         ResponseAction
-  sourceStage    ConvocationStage?  @map("source_stage")
-  rawText        String?            @map("raw_text")
-  receivedAt     DateTime           @map("received_at") @db.Timestamptz(3)
-  createdAt      DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  message        Message?           @relation(fields: [messageId], references: [id])
-  convocation    Convocation        @relation(fields: [convocationId], references: [id])
+  id            String            @id @default(uuid()) @db.Uuid
+  messageId     String?           @map("message_id") @db.Uuid
+  convocationId String            @map("convocation_id") @db.Uuid
+  action        ResponseAction
+  sourceStage   ConvocationStage? @map("source_stage")
+  rawText       String?           @map("raw_text")
+  receivedAt    DateTime          @map("received_at") @db.Timestamptz(3)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  message       Message?          @relation(fields: [messageId], references: [id])
+  convocation   Convocation       @relation(fields: [convocationId], references: [id])
 
   @@index([convocationId, receivedAt])
   @@map("message_responses")

@@ -6,8 +6,8 @@ export class WebhooksController {
   constructor(private readonly webhooksService: WebhooksService) {}
 
   @Post()
-  @HttpCode(202)
-  receive(@Body() payload: unknown, @Headers('x-confirma-webhook-secret') secret?: string) {
-    return this.webhooksService.receive(payload, secret);
+  @HttpCode(204)
+  async receive(@Body() payload: unknown, @Headers('x-confirma-webhook-secret') secret?: string) {
+    await this.webhooksService.receive(payload, secret);
   }
 }
