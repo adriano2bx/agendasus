@@ -360,7 +360,6 @@ function StageCard({ stage, values }: { stage: string; values: Record<string, nu
         <strong>{stageLabel(stage)}</strong>
       </div>
       <dl>
-        <StageValue label="Aceitas" value={values.SUBMITTED ?? 0} />
         <StageValue label="Enviadas" value={values.SENT ?? 0} />
         <StageValue label="Entregues" value={values.DELIVERED ?? 0} />
         <StageValue label="Lidas" value={values.READ ?? 0} />
