@@ -18,16 +18,15 @@ export class ImportsService {
   constructor(@Inject(IMPORT_QUEUE) private readonly queue: Queue<ParseImportJob>) {}
 
   async create(file: Express.Multer.File, userId: string) {
-    if (
-      file.mimetype !== 'application/pdf' ||
-      !file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))
-    ) {
-      throw new BadRequestException('Envie um arquivo PDF válido');
-    }
+    const isPdf = file.mimetype === 'application/pdf' && file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'));
+    const isXlsx =
+      (file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.mimetype === 'application/zip' || file.originalname.toLowerCase().endsWith('.xlsx')) &&
+      file.buffer.subarray(0, 2).equals(Buffer.from('PK'));
+    if (!isPdf && !isXlsx) throw new BadRequestException('Envie um arquivo PDF ou uma planilha XLSX válida');
 
     const temporaryDirectory = environment().UPLOAD_TEMP_DIR;
     await mkdir(temporaryDirectory, { recursive: true });
-    const temporaryPath = join(temporaryDirectory, `${randomUUID()}.pdf`);
+    const temporaryPath = join(temporaryDirectory, `${randomUUID()}${isXlsx ? '.xlsx' : '.pdf'}`);
     await writeFile(temporaryPath, file.buffer, { flag: 'wx' });
 
     const checksum = createHash('sha256').update(file.buffer).digest('hex');

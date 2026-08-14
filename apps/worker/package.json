@@ -16,6 +16,7 @@
     "@confirma/domain": "workspace:*",
     "@confirma/queue": "workspace:*",
     "bullmq": "5.41.9",
+    "exceljs": "^4.4.0",
     "pdfjs-dist": "4.10.38"
   },
   "devDependencies": {

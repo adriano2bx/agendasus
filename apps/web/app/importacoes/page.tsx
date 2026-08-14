@@ -64,7 +64,7 @@ export default function ImportsPage() {
     const body = new FormData(form);
     try {
       const response = await authFetch(`${API_URL}/imports`, { method: 'POST', body });
-      if (!response.ok) throw new Error('Não foi possível enviar o PDF');
+      if (!response.ok) throw new Error('Não foi possível enviar o arquivo');
       const result = (await response.json()) as { id: string };
       setMessage('Arquivo recebido. A extração foi iniciada.');
       form.reset();
@@ -94,7 +94,7 @@ export default function ImportsPage() {
         <article className="panel">
           <header className="panel-header">
             <h2>Selecione o relatório</h2>
-            <span className="badge">PDF · até 20 MB</span>
+            <span className="badge">PDF ou XLSX · até 20 MB</span>
           </header>
           <div className="panel-body">
             <label
@@ -122,14 +122,14 @@ export default function ImportsPage() {
                 id="file"
                 name="file"
                 type="file"
-                accept="application/pdf,.pdf"
+                accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.xlsx"
                 required
                 onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
               />
               <span className="upload-icon">
                 <Icon name={fileName ? 'check' : 'upload'} />
               </span>
-              <strong>{fileName || 'Arraste ou selecione o arquivo PDF'}</strong>
+              <strong>{fileName || 'Arraste ou selecione um PDF ou XLSX'}</strong>
               <p>
                 {fileName
                   ? 'Arquivo pronto para processamento'
