@@ -218,19 +218,19 @@ export default function DashboardPage() {
               </header>
               <div className="panel-body metric-list">
                 <Progress
-                  label="Confirmados"
+                  label="Confirmados (1ª, 2ª ou 3ª convocação)"
                   value={data.outcomes.confirmed}
                   total={finalTotal}
                   color="var(--success)"
                 />
                 <Progress
-                  label="Cancelados"
+                  label="Cancelados (1ª, 2ª ou 3ª convocação)"
                   value={data.outcomes.cancelled}
                   total={finalTotal}
                   color="var(--cancelled)"
                 />
                 <Progress
-                  label="Sem resposta"
+                  label="Sem resposta (após a 3ª convocação)"
                   value={data.outcomes.noResponse}
                   total={finalTotal}
                   color="var(--warning)"
@@ -353,12 +353,11 @@ function Attention({
   );
 }
 function StageCard({ stage, values }: { stage: string; values: Record<string, number> }) {
-  const ordinal = stage === 'FIRST' ? 'primeira' : stage === 'SECOND' ? 'segunda' : 'terceira';
   return (
     <article className="stage-card">
       <div className="stage-card-heading">
         <span className="schedule-index">{stage === 'FIRST' ? 1 : stage === 'SECOND' ? 2 : 3}</span>
-        <strong>{stageLabel(stage)} ({ordinal} convocação)</strong>
+        <strong>{stageLabel(stage)}</strong>
       </div>
       <dl>
         <StageValue label="Enviadas" value={values.SENT ?? 0} />
