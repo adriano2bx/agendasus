@@ -4,17 +4,18 @@ import Link from 'next/link';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AppShell } from '../components/navigation';
 import { EmptyState, Icon, StatusBadge } from '../components/ui';
+import { authFetch } from '../lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 type ImportItem = { id: string; status: string; recordsFound: number; createdAt: string; files: Array<{ originalName: string; sizeBytes?: number }> };
 
 export default function ImportsPage() {
   const [message, setMessage] = useState(''); const [loading, setLoading] = useState(false); const [fileName, setFileName] = useState(''); const [imports, setImports] = useState<ImportItem[]>([]); const input = useRef<HTMLInputElement>(null);
-  async function loadImports() { const token = sessionStorage.getItem('confirma_access_token'); if (!token) return; const response = await fetch(`${API_URL}/imports`, { headers: { authorization: `Bearer ${token}` } }); if (response.ok) setImports(await response.json()); }
+  async function loadImports() { const response = await authFetch(`${API_URL}/imports`); if (response.ok) setImports(await response.json()); }
   useEffect(() => { void loadImports(); }, []);
   async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setLoading(true); setMessage(''); const form = event.currentTarget; const body = new FormData(form); const token = sessionStorage.getItem('confirma_access_token');
-    try { const response = await fetch(`${API_URL}/imports`, { method: 'POST', headers: token ? { authorization: `Bearer ${token}` } : {}, body }); if (!response.ok) throw new Error('Não foi possível enviar o PDF'); const result = await response.json() as { id: string }; setMessage('Arquivo recebido. A extração foi iniciada.'); form.reset(); setFileName(''); await loadImports(); window.setTimeout(() => location.assign(`/importacoes/${result.id}`), 500); }
+    event.preventDefault(); setLoading(true); setMessage(''); const form = event.currentTarget; const body = new FormData(form);
+    try { const response = await authFetch(`${API_URL}/imports`, { method: 'POST', body }); if (!response.ok) throw new Error('Não foi possível enviar o PDF'); const result = await response.json() as { id: string }; setMessage('Arquivo recebido. A extração foi iniciada.'); form.reset(); setFileName(''); await loadImports(); window.setTimeout(() => location.assign(`/importacoes/${result.id}`), 500); }
     catch (cause) { setMessage(cause instanceof Error ? cause.message : 'Falha no upload'); } finally { setLoading(false); }
   }
   return <AppShell title="Importações" eyebrow="Entrada de dados">

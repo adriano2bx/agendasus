@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { AppShell } from '../components/navigation';
 import { EmptyState, Icon } from '../components/ui';
+import { authFetch } from '../lib/api';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 type Overview = { activeCampaigns: number; convocations: number; messages: number; convocationByStatus: Record<string, number>; messageByStatus: Record<string, number>; stageByStatus?: Array<{ stage: string; status: string; _count: { _all: number } }> };
@@ -12,8 +13,7 @@ export default function DashboardPage() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState('');
   useEffect(() => {
-    const token = sessionStorage.getItem('confirma_access_token');
-    fetch(`${API}/dashboard/overview`, { headers: { authorization: `Bearer ${token}` } })
+    authFetch(`${API}/dashboard/overview`)
       .then(async (response) => response.ok ? setData(await response.json()) : setError('Não foi possível carregar o painel.'))
       .catch(() => setError('Não foi possível carregar o painel.'));
   }, []);

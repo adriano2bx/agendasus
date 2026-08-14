@@ -5,13 +5,14 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '../../components/navigation';
 import { Icon, StatusBadge } from '../../components/ui';
+import { authFetch } from '../../lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 type Review = { id: string; status: string; layout: string | null; warnings: string[] | null; counts: { totalRows: number; validRows: number; warningRows: number; invalidRows: number; identifiedPatients: number }; canApprove: boolean; sourceRecordCount: number; campaign: { id: string; name: string; status: string; firstActionAt: string | null } | null; rows: Array<{ id: string; rowNumber: number; validationStatus: string; validationIssues: string[] | null; data: Record<string, unknown> | null }> };
 
 export default function ImportReviewPage() {
   const params = useParams<{ id: string }>(); const [review, setReview] = useState<Review | null>(null); const [message, setMessage] = useState(''); const [loading, setLoading] = useState(false); const [campaignId, setCampaignId] = useState<string | null>(null); const [campaignStatus, setCampaignStatus] = useState<string | null>(null); const [query, setQuery] = useState(''); const [onlyIssues, setOnlyIssues] = useState(false);
-  async function request(path: string, init?: RequestInit) { const token = sessionStorage.getItem('confirma_access_token'); const response = await fetch(`${API_URL}${path}`, { ...init, headers: { authorization: `Bearer ${token}`, ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? 'Não foi possível concluir a operação'); return response.json(); }
+  async function request(path: string, init?: RequestInit) { const response = await authFetch(`${API_URL}${path}`, init); if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? 'Não foi possível concluir a operação'); return response.json(); }
   async function load() { try { const loaded = await request(`/imports/${params.id}/review`) as Review; setReview(loaded); setCampaignId(loaded.campaign?.id ?? null); setCampaignStatus(loaded.campaign?.status ?? null); } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha ao carregar revisão'); } }
   useEffect(() => { void load(); }, [params.id]);
   async function approve() { setLoading(true); setMessage(''); try { await request(`/imports/${params.id}/approve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); await load(); setMessage('Importação aprovada. Defina agora a programação.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível aprovar'); } finally { setLoading(false); } }
