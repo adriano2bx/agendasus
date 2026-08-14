@@ -891,7 +891,7 @@ function NumberField({ id, label, value }: { id: string; label: string; value: n
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <input id={id} name={id} type="number" min="1" max="30" defaultValue={value} required />
+      <input id={id} name={id} type="number" min="0" max="30" defaultValue={value} required />
     </div>
   );
 }
