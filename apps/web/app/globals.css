@@ -725,6 +725,9 @@ h3 {
   color: var(--muted);
   font-size: 11px;
 }
+.user-active-control {
+  margin: 4px 0 8px;
+}
 .input-with-icon {
   position: relative;
 }

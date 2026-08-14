@@ -8,9 +8,20 @@ import { ImportsModule } from './imports/imports.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { BillingModule } from './billing/billing.module.js';
+import { UsersModule } from './users/users.module.js';
 
 @Module({
-  imports: [AuthModule, ImportsModule, CampaignsModule, WebhooksModule, DashboardModule, ConvocationsModule, ReportsModule, BillingModule],
+  imports: [
+    AuthModule,
+    ImportsModule,
+    CampaignsModule,
+    WebhooksModule,
+    DashboardModule,
+    ConvocationsModule,
+    ReportsModule,
+    BillingModule,
+    UsersModule,
+  ],
   controllers: [HealthController],
 })
 export class AppModule {}

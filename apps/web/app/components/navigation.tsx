@@ -34,7 +34,11 @@ export function AppShell({
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+  const [user, setUser] = useState<{
+    name: string;
+    email: string;
+    role: 'ADMIN' | 'OPERATOR';
+  } | null>(null);
   const crumbs = pathname.split('/').filter(Boolean);
 
   useEffect(() => {
@@ -60,6 +64,17 @@ export function AppShell({
     .join('')
     .toUpperCase();
 
+  const visibleGroups =
+    user?.role === 'ADMIN'
+      ? [
+          ...groups,
+          {
+            label: 'Administração',
+            links: [{ label: 'Usuários', href: '/usuarios', icon: 'user' }],
+          },
+        ]
+      : groups;
+
   return (
     <div className="app-shell">
       <button
@@ -82,7 +97,7 @@ export function AppShell({
           <Brand negative />
         </Link>
         <nav className="side-nav" aria-label="Navegação principal">
-          {groups.map((group) => (
+          {visibleGroups.map((group) => (
             <section className="nav-group" key={group.label}>
               <span className="nav-label">{group.label}</span>
               {group.links.map((link) => {
@@ -146,6 +161,7 @@ function humanize(value: string) {
     campanhas: 'Campanhas',
     convocacoes: 'Convocações',
     relatorios: 'Relatórios',
+    usuarios: 'Usuários',
   };
   return labels[value] ?? value.replace(/-/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
 }

@@ -16,7 +16,9 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
 
     if (!email || !password) {
       if (config.NODE_ENV === 'production') {
-        throw new Error('ADMIN_EMAIL e ADMIN_PASSWORD devem ser configurados no ambiente de produção');
+        throw new Error(
+          'ADMIN_EMAIL e ADMIN_PASSWORD devem ser configurados no ambiente de produção',
+        );
       }
       return;
     }
@@ -24,7 +26,10 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
     const passwordHash = await hash(password, 12);
     const existing = await prisma.user.findUnique({ where: { email } });
     await prisma.$transaction([
-      prisma.user.updateMany({ where: { email: { not: email }, active: true }, data: { active: false } }),
+      prisma.user.updateMany({
+        where: { email: { not: email }, role: 'ADMIN' },
+        data: { role: 'OPERATOR' },
+      }),
       prisma.user.upsert({
         where: { email },
         create: { name: config.ADMIN_NAME, email, passwordHash, role: 'ADMIN', active: true },

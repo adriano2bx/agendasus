@@ -28,6 +28,7 @@ Monorepo do MVP de automação das convocações SUS por WhatsApp.
 5. Programe a campanha: scheduler + BullMQ executam primeira, segunda e terceira tentativas.
 6. Confirmação ou cancelamento por botão encerra a convocação; ausência de resposta avança tentativas e, depois da terceira, finaliza após `FINAL_RESPONSE_WINDOW_DAYS`.
 7. Consulte o painel em `/painel`, a lista em `/convocacoes` e exporte CSVs pelas rotas protegidas de relatórios.
+8. O administrador provisionado por `ADMIN_*` pode criar, desativar e redefinir a senha de operadores persistidos no PostgreSQL.
 
 Campanhas podem ser programadas e executadas por scheduler. O envio começa em `DRY_RUN`; somente o worker com `MESSAGING_MODE=LIVE` e secrets Gupshup configurados realiza disparos reais. O webhook está disponível em `/api/webhooks/gupshup`.
 

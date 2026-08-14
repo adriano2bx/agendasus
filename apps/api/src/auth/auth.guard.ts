@@ -1,10 +1,6 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { prisma } from '@confirma/database';
 import type { Request } from 'express';
 
 export interface AuthenticatedRequest extends Request {
@@ -24,11 +20,16 @@ export class AuthGuard implements CanActivate {
     }
 
     try {
-      request.user = await this.jwtService.verifyAsync(token);
+      const payload = await this.jwtService.verifyAsync<{ sub: string }>(token);
+      const user = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { id: true, email: true, role: true, active: true },
+      });
+      if (!user?.active) throw new UnauthorizedException('Usuário inativo');
+      request.user = { sub: user.id, email: user.email, role: user.role };
       return true;
     } catch {
       throw new UnauthorizedException('Token inválido ou expirado');
     }
   }
 }
-
