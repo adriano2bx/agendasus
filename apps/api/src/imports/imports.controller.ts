@@ -60,6 +60,11 @@ export class ImportsController {
     return this.importsService.approve(id, request.user!.sub, input.note);
   }
 
+  @Post(':id/cancel')
+  cancel(@Param('id', ParseUUIDPipe) id: string, @Req() request: AuthenticatedRequest) {
+    return this.importsService.cancel(id, request.user!.sub);
+  }
+
   @Patch(':id/rows/:rowId')
   updateRow(
     @Param('id', ParseUUIDPipe) id: string,

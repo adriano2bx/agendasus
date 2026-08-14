@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
 import { Prisma, prisma } from '@confirma/database';
@@ -281,6 +281,57 @@ export class ImportsService {
         data: updated.normalizedData,
       };
     });
+  }
+
+  async cancel(id: string, userId: string) {
+    const result = await prisma.$transaction(async (transaction) => {
+      const imported = await transaction.import.findUnique({
+        where: { id },
+        include: { campaigns: true, files: true },
+      });
+      if (!imported) throw new BadRequestException('Importação não encontrada');
+      if (imported.status === 'CANCELLED') return { updated: imported, files: imported.files };
+      if (imported.status === 'FAILED')
+        throw new ConflictException('Uma importação com falha não pode ser abortada');
+      const campaign = imported.campaigns[0];
+      if (campaign && campaign.status !== 'DRAFT') {
+        throw new ConflictException('O fluxo já foi programado; cancele a campanha na operação');
+      }
+      if (campaign) {
+        await transaction.campaign.update({
+          where: { id: campaign.id },
+          data: { status: 'CANCELLED', cancelledAt: new Date() },
+        });
+        await transaction.convocation.updateMany({
+          where: {
+            campaignId: campaign.id,
+            status: { in: ['SCHEDULED', 'QUEUED', 'PROCESSING', 'WAITING_RESPONSE'] },
+          },
+          data: { nextActionAt: null },
+        });
+      }
+      const updated = await transaction.import.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+      });
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          eventType: 'IMPORT_CANCELLED',
+          entityType: 'import',
+          entityId: id,
+          ...(campaign ? { metadata: { campaignId: campaign.id } } : {}),
+        },
+      });
+      return { updated, files: imported.files };
+    });
+
+    const job = await this.queue.getJob(`parse:${result.files[0]?.id ?? ''}`);
+    await job?.remove().catch(() => undefined);
+    for (const file of result.files) {
+      if (file.temporaryKey) await unlink(file.temporaryKey).catch(() => undefined);
+    }
+    return result.updated;
   }
 
   async approve(id: string, userId: string, note?: string) {

@@ -188,6 +188,7 @@ export default function ImportsPage() {
             <option value="READY_FOR_REVIEW">Pronta para revisão</option>
             <option value="REVIEW_REQUIRED">Revisão necessária</option>
             <option value="APPROVED">Aprovada</option>
+            <option value="CANCELLED">Abortada</option>
             <option value="FAILED">Falha</option>
           </select>
         </header>

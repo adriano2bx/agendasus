@@ -30,6 +30,14 @@ const worker = new Worker<ParseImportJob>(
   async (job) => {
     if (job.name !== 'parse-import') return;
     const { importId, importFileId, temporaryPath } = job.data;
+    const current = await prisma.import.findUnique({
+      where: { id: importId },
+      select: { status: true },
+    });
+    if (!current || current.status === 'CANCELLED') {
+      await unlink(temporaryPath).catch(() => undefined);
+      return;
+    }
     const data = await readFile(temporaryPath);
     let parsed = await parseSisregPdf(new Uint8Array(data));
     try {
@@ -45,6 +53,11 @@ const worker = new Worker<ParseImportJob>(
     }
 
     await prisma.$transaction(async (transaction) => {
+      const latest = await transaction.import.findUnique({
+        where: { id: importId },
+        select: { status: true },
+      });
+      if (!latest || latest.status === 'CANCELLED') return;
       await transaction.importRow.deleteMany({ where: { importFileId } });
       if (parsed.rows.length > 0) {
         await transaction.importRow.createMany({
@@ -382,8 +395,8 @@ function isSendableStage(stage: string): stage is SendMessageJob['stage'] {
 worker.on('failed', async (job, error) => {
   if (!job || job.attemptsMade < (job.opts.attempts ?? 1)) return;
   await prisma.import
-    .update({
-      where: { id: job.data.importId },
+    .updateMany({
+      where: { id: job.data.importId, status: { not: 'CANCELLED' } },
       data: { status: 'FAILED', failureReason: error.message.slice(0, 500) },
     })
     .catch(() => undefined);

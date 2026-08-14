@@ -148,6 +148,26 @@ export default function ImportReviewPage() {
     }
   }
 
+  async function abortFlow() {
+    if (!window.confirm('Abortar esta importação e qualquer campanha ainda em rascunho?')) return;
+    setLoading(true);
+    try {
+      await request(`/imports/${params.id}/cancel`, { method: 'POST' });
+      await load(true);
+      setNotice({
+        tone: 'success',
+        text: 'Fluxo abortado. Nenhum novo processamento será iniciado.',
+      });
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Não foi possível abortar o fluxo',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function saveRow(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editing) return;
@@ -259,13 +279,29 @@ export default function ImportReviewPage() {
         title="Processando importação"
         eyebrow={layoutLabel(review.layout)}
         actions={
-          <Link href="/importacoes" className="button secondary">
-            Voltar
-          </Link>
+          <div className="actions">
+            <Link href="/importacoes" className="button secondary">
+              Voltar
+            </Link>
+            <button className="button danger ghost" onClick={() => void abortFlow()}>
+              Abortar
+            </button>
+          </div>
         }
       >
         <section className="panel">
           <LoadingState label="Extraindo e validando os dados do SISREG. Esta tela será atualizada automaticamente…" />
+        </section>
+      </AppShell>
+    );
+  if (review.status === 'CANCELLED')
+    return (
+      <AppShell title="Fluxo abortado" eyebrow={layoutLabel(review.layout)}>
+        <section className="panel">
+          <Feedback tone="notice">Esta importação foi abortada e não pode mais avançar.</Feedback>
+          <Link href="/importacoes" className="button secondary">
+            Voltar às importações
+          </Link>
         </section>
       </AppShell>
     );
@@ -277,9 +313,17 @@ export default function ImportReviewPage() {
       title={approved ? 'Programar campanha' : 'Conferir importação'}
       eyebrow={layoutLabel(review.layout)}
       actions={
-        <Link href="/importacoes" className="button secondary">
-          Voltar
-        </Link>
+        <div className="actions">
+          <Link href="/importacoes" className="button secondary">
+            Voltar
+          </Link>
+          {!['CANCELLED', 'FAILED'].includes(review.status) &&
+          (!campaignStatus || campaignStatus === 'DRAFT') ? (
+            <button className="button danger ghost" onClick={() => void abortFlow()}>
+              Abortar
+            </button>
+          ) : null}
+        </div>
       }
     >
       <section className="steps panel">
@@ -462,7 +506,11 @@ function RecordsReview({
                     <StatusBadge value={row.validationStatus} />
                   </td>
                   <td>
-                    <button className="button secondary small" onClick={() => onEdit(row)}>
+                    <button
+                      type="button"
+                      className="button secondary small"
+                      onClick={() => onEdit(row)}
+                    >
                       Editar
                     </button>
                   </td>
@@ -896,7 +944,17 @@ function ScheduleItem({
     </div>
   );
 }
-function NumberField({ id, label, value, min = 0 }: { id: string; label: string; value: number; min?: number }) {
+function NumberField({
+  id,
+  label,
+  value,
+  min = 0,
+}: {
+  id: string;
+  label: string;
+  value: number;
+  min?: number;
+}) {
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
