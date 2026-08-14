@@ -369,6 +369,57 @@ h3 {
   font-size: 13px;
   line-height: 1.4;
 }
+.closure-reason {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: start;
+  gap: 13px;
+  margin: -4px 0 20px;
+  padding: 16px 18px;
+  border: 1px solid;
+  border-radius: var(--radius-md);
+}
+.closure-reason-cancelled {
+  border-color: #efc7c4;
+  background: #fff6f5;
+}
+.closure-reason-confirmed {
+  border-color: #b9e2d1;
+  background: #f2fbf7;
+}
+.closure-reason-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--cancelled);
+  background: #fde8e6;
+}
+.closure-reason-confirmed .closure-reason-icon {
+  color: var(--success);
+  background: #ddf4e9;
+}
+.closure-reason > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.closure-reason small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+.closure-reason strong {
+  color: var(--navy);
+  overflow-wrap: anywhere;
+}
+.closure-reason > div > span {
+  color: var(--muted);
+  font-size: 11px;
+}
 .convocation-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.85fr) minmax(310px, 0.72fr);
@@ -1176,6 +1227,10 @@ tbody tr:hover {
 .timeline-copy small {
   color: var(--muted);
 }
+.timeline-copy > span {
+  color: var(--muted);
+  line-height: 1.45;
+}
 .metric-list {
   display: grid;
   gap: 14px;
@@ -1592,10 +1647,9 @@ tbody tr:hover {
 }
 .patient-group {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(120px, 0.6fr) minmax(190px, 0.8fr) minmax(
-      220px,
-      1.3fr
-    ) auto;
+  grid-template-columns:
+    minmax(180px, 1.2fr) minmax(120px, 0.6fr) minmax(190px, 0.8fr) minmax(220px, 1.3fr)
+    auto;
   align-items: center;
   gap: 18px;
   padding: 15px;

@@ -91,6 +91,13 @@ export default function DetailPage() {
         )}
       </AppShell>
     );
+  const manualClosure = [...item.auditLogs]
+    .reverse()
+    .find(
+      (audit: any) =>
+        audit.eventType === 'CONVOCATION_STATUS_CHANGED_MANUALLY' &&
+        audit.newData?.status === item.status,
+    );
   const events = [
     ...item.messages.flatMap((m: any) =>
       [
@@ -151,6 +158,15 @@ export default function DetailPage() {
     ...item.auditLogs.map((a: any) => ({
       id: a.id,
       title: auditLabel(a.eventType),
+      detail:
+        a.eventType === 'CONVOCATION_STATUS_CHANGED_MANUALLY'
+          ? [
+              a.reason ? `Motivo: ${a.reason}` : null,
+              a.user?.name ? `Responsável: ${a.user.name}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
+          : null,
       date: a.createdAt,
       type: 'audit',
     })),
@@ -234,6 +250,30 @@ export default function DetailPage() {
           value={item.nextActionAt ? date(item.nextActionAt) : 'Nenhuma ação programada'}
         />
       </section>
+      {manualClosure ? (
+        <section
+          className={`closure-reason ${item.status === 'CANCELLED' ? 'closure-reason-cancelled' : 'closure-reason-confirmed'}`}
+          aria-label={
+            item.status === 'CANCELLED' ? 'Motivo do cancelamento' : 'Motivo da confirmação'
+          }
+        >
+          <span className="closure-reason-icon">
+            <Icon name={item.status === 'CANCELLED' ? 'alert' : 'check'} />
+          </span>
+          <div>
+            <small>
+              {item.status === 'CANCELLED'
+                ? 'Motivo do cancelamento manual'
+                : 'Motivo da confirmação manual'}
+            </small>
+            <strong>{manualClosure.reason || 'Motivo não informado'}</strong>
+            <span>
+              Registrado por {manualClosure.user?.name || 'usuário não identificado'} em{' '}
+              {date(manualClosure.createdAt)}
+            </span>
+          </div>
+        </section>
+      ) : null}
 
       <section className="convocation-layout">
         <div className="convocation-main">
@@ -451,6 +491,7 @@ export default function DetailPage() {
                     <span className="timeline-dot" />
                     <span className="timeline-copy">
                       <strong>{event.title}</strong>
+                      {event.detail ? <span>{event.detail}</span> : null}
                       <small>{date(event.date)}</small>
                     </span>
                   </li>
