@@ -22,7 +22,12 @@ shutdown() {
   wait "$web_pid" "$api_pid" "$worker_pid" 2>/dev/null || true
 }
 
-trap shutdown TERM INT
+shutdown_from_signal() {
+  shutdown
+  exit 0
+}
+
+trap shutdown_from_signal TERM INT
 
 echo "Iniciando API, worker e painel..."
 node apps/api/dist/main.js &

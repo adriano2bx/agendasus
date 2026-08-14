@@ -21,6 +21,7 @@ import { parseSisregPdf } from './sisreg-parser.js';
 
 const timezone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
 process.env.TZ = timezone;
+let shuttingDown = false;
 
 const importConnection = createRedisConnection();
 const worker = new Worker<ParseImportJob>(
@@ -261,17 +262,11 @@ async function finalizeNoResponseDue(now: Date): Promise<void> {
 }
 
 const scheduler = setInterval(
-  () =>
-    void enqueueDueConvocations().catch((error: unknown) =>
-      console.error('Erro no scheduler', error),
-    ),
+  () => void enqueueDueConvocations().catch((error: unknown) => reportSchedulerError(error)),
   Number(process.env.SCHEDULER_INTERVAL_MS ?? 10_000),
 );
 const cleanupTimer = setInterval(
-  () =>
-    void cleanupTemporaryFiles().catch((error: unknown) =>
-      console.error('Erro na limpeza temporária', error),
-    ),
+  () => void cleanupTemporaryFiles().catch((error: unknown) => reportCleanupError(error)),
   60 * 60 * 1_000,
 );
 void enqueueDueConvocations();
@@ -296,6 +291,25 @@ async function cleanupTemporaryFiles(): Promise<void> {
   }
 }
 
+function reportSchedulerError(error: unknown): void {
+  if (shuttingDown && isClosedConnectionError(error)) return;
+  console.error('Erro no scheduler', error);
+}
+
+function reportCleanupError(error: unknown): void {
+  if (shuttingDown && isClosedConnectionError(error)) return;
+  console.error('Erro na limpeza temporária', error);
+}
+
+function isClosedConnectionError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'P1017'
+  );
+}
+
 function isSendableStage(stage: string): stage is SendMessageJob['stage'] {
   return stage === 'FIRST' || stage === 'SECOND' || stage === 'THIRD';
 }
@@ -311,6 +325,8 @@ worker.on('failed', async (job, error) => {
 });
 
 async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   clearInterval(scheduler);
   clearInterval(cleanupTimer);
   await worker.close();
