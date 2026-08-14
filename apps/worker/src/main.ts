@@ -337,12 +337,12 @@ async function cleanupTemporaryFiles(): Promise<void> {
 
 function reportSchedulerError(error: unknown): void {
   if (shuttingDown && isClosedConnectionError(error)) return;
-  console.error('Erro no scheduler', error);
+  console.error('Erro no scheduler:', error instanceof Error ? error.message : 'falha não identificada');
 }
 
 function reportCleanupError(error: unknown): void {
   if (shuttingDown && isClosedConnectionError(error)) return;
-  console.error('Erro na limpeza temporária', error);
+  console.error('Erro na limpeza temporária:', error instanceof Error ? error.message : 'falha não identificada');
 }
 
 function isClosedConnectionError(error: unknown): boolean {

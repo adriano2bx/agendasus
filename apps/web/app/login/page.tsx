@@ -12,7 +12,9 @@ export default function LoginPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (sessionStorage.getItem('confirma_access_token')) router.replace('/painel');
+    fetch(`${API_URL}/auth/me`, { credentials: 'include' }).then((response) => {
+      if (response.ok) router.replace('/painel');
+    }).catch(() => undefined);
   }, [router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -24,14 +26,14 @@ export default function LoginPage() {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email: data.get('email'), password: data.get('password') }),
       });
       if (!response.ok) throw new Error('E-mail ou senha inválidos');
       const result = (await response.json()) as {
-        accessToken: string;
         user: { name: string; email: string; role: string };
       };
-      sessionStorage.setItem('confirma_access_token', result.accessToken);
+      sessionStorage.removeItem('confirma_access_token');
       sessionStorage.setItem('confirma_user', JSON.stringify(result.user));
       router.push('/painel');
     } catch (cause) {

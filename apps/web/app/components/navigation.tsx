@@ -53,7 +53,6 @@ export function AppShell({
 
   async function logout() {
     await authFetch(`${API}/auth/logout`, { method: 'POST' }).catch(() => undefined);
-    sessionStorage.removeItem('confirma_access_token');
     sessionStorage.removeItem('confirma_user');
     router.replace('/login');
   }
