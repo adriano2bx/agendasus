@@ -33,7 +33,13 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
       prisma.user.upsert({
         where: { email },
         create: { name: config.ADMIN_NAME, email, passwordHash, role: 'ADMIN', active: true },
-        update: { name: config.ADMIN_NAME, passwordHash, role: 'ADMIN', active: true },
+        update: {
+          name: config.ADMIN_NAME,
+          passwordHash,
+          role: 'ADMIN',
+          active: true,
+          deletedAt: null,
+        },
       }),
     ]);
 

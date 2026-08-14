@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   Param,
@@ -40,6 +41,12 @@ export class UsersController {
   ) {
     this.requireAdministrator(request);
     return this.users.update(id, input, request.user!.sub);
+  }
+
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string, @Req() request: AuthenticatedRequest) {
+    this.requireAdministrator(request);
+    return this.users.remove(id, request.user!.sub);
   }
 
   private requireAdministrator(request: AuthenticatedRequest) {

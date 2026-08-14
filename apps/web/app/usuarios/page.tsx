@@ -26,6 +26,7 @@ export default function UsersPage() {
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [editing, setEditing] = useState<Operator | 'new' | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Operator | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -93,6 +94,30 @@ export default function UsersPage() {
     }
   }
 
+  async function remove() {
+    if (!pendingDelete) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const response = await authFetch(`${API}/users/${pendingDelete.id}`, { method: 'DELETE' });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(body?.message ?? 'Não foi possível excluir o operador.');
+      }
+      const name = pendingDelete.name;
+      setPendingDelete(null);
+      setNotice({ tone: 'success', text: `O acesso de ${name} foi excluído.` });
+      await load();
+    } catch (error) {
+      setNotice({
+        tone: 'error',
+        text: error instanceof Error ? error.message : 'Não foi possível excluir o operador.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <AppShell
       title="Usuários"
@@ -151,12 +176,20 @@ export default function UsersPage() {
                     </td>
                     <td>{formatDateTime(operator.createdAt)}</td>
                     <td>
-                      <button
-                        className="button secondary small"
-                        onClick={() => setEditing(operator)}
-                      >
-                        Editar
-                      </button>
+                      <div className="actions">
+                        <button
+                          className="button secondary small"
+                          onClick={() => setEditing(operator)}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="button danger ghost small"
+                          onClick={() => setPendingDelete(operator)}
+                        >
+                          Excluir
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -179,7 +212,63 @@ export default function UsersPage() {
           onSubmit={save}
         />
       ) : null}
+      {pendingDelete ? (
+        <DeleteUserModal
+          operator={pendingDelete}
+          saving={saving}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={() => void remove()}
+        />
+      ) : null}
     </AppShell>
+  );
+}
+
+function DeleteUserModal({
+  operator,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  operator: Operator;
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <article
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-user-title"
+      >
+        <header className="modal-header">
+          <h2 id="delete-user-title">Excluir operador?</h2>
+        </header>
+        <div className="modal-body">
+          <p>
+            O acesso de <strong>{operator.name}</strong> será encerrado imediatamente e deixará de
+            aparecer na lista de operadores.
+          </p>
+          <p className="muted">As atividades anteriores continuarão preservadas na auditoria.</p>
+        </div>
+        <footer className="modal-actions">
+          <button className="button secondary" onClick={onClose} disabled={saving}>
+            Manter operador
+          </button>
+          <button className="button danger" onClick={onConfirm} disabled={saving}>
+            {saving ? 'Excluindo…' : 'Excluir operador'}
+          </button>
+        </footer>
+      </article>
+    </div>
   );
 }
 

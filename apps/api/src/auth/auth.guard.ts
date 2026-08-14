@@ -23,9 +23,9 @@ export class AuthGuard implements CanActivate {
       const payload = await this.jwtService.verifyAsync<{ sub: string }>(token);
       const user = await prisma.user.findUnique({
         where: { id: payload.sub },
-        select: { id: true, email: true, role: true, active: true },
+        select: { id: true, email: true, role: true, active: true, deletedAt: true },
       });
-      if (!user?.active) throw new UnauthorizedException('Usuário inativo');
+      if (!user?.active || user.deletedAt) throw new UnauthorizedException('Usuário inativo');
       request.user = { sub: user.id, email: user.email, role: user.role };
       return true;
     } catch {

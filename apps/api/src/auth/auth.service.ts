@@ -17,7 +17,7 @@ export class AuthService {
   }> {
     const user = await prisma.user.findUnique({ where: { email: input.email.toLowerCase() } });
 
-    if (!user?.active || !(await compare(input.password, user.passwordHash))) {
+    if (!user?.active || user.deletedAt || !(await compare(input.password, user.passwordHash))) {
       throw new UnauthorizedException('E-mail ou senha inválidos');
     }
 

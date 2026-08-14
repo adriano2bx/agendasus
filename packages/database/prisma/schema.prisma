@@ -93,10 +93,12 @@ model User {
   passwordHash String     @map("password_hash")
   role         UserRole   @default(OPERATOR)
   active       Boolean    @default(true)
+  deletedAt    DateTime?  @map("deleted_at") @db.Timestamptz(3)
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
   auditLogs    AuditLog[]
 
+  @@index([deletedAt])
   @@map("users")
 }
 
