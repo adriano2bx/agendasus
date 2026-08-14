@@ -37,6 +37,15 @@ wait -n "$api_pid" "$worker_pid" "$web_pid"
 status=$?
 set -e
 
-echo "Um dos processos foi encerrado; finalizando o container..."
+ended_process="desconhecido"
+if ! kill -0 "$api_pid" 2>/dev/null; then
+  ended_process="API"
+elif ! kill -0 "$worker_pid" 2>/dev/null; then
+  ended_process="worker"
+elif ! kill -0 "$web_pid" 2>/dev/null; then
+  ended_process="painel"
+fi
+
+echo "Processo ${ended_process} encerrado com código ${status}; finalizando o container..."
 shutdown
 exit "$status"
