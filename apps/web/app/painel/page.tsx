@@ -24,7 +24,7 @@ export default function DashboardPage() {
   const failed = (data?.convocationByStatus.SEND_ERROR ?? 0) + (data?.messageByStatus.FAILED ?? 0);
   const finalTotal = Math.max(confirmed + cancelled + (data?.convocationByStatus.FINISHED_NO_RESPONSE ?? 0), 1);
 
-  return <AppShell title="Visão geral" eyebrow="Operação de hoje" actions={<Link className="button" href="/importacoes"><Icon name="plus" />Nova importação</Link>}>
+  return <AppShell title="Visão geral" eyebrow="Operação de hoje">
     <p className="content-lead">Acompanhe campanhas, respostas e ocorrências que precisam de atenção.</p>
     {error ? <p className="error"><Icon name="alert" />{error}</p> : null}
     {!data ? <div className="panel"><EmptyState title="Carregando indicadores" description="Estamos consolidando os dados operacionais." /></div> : <>
