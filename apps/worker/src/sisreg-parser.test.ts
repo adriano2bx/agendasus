@@ -58,17 +58,41 @@ describe('parser SISREG', () => {
     assert.equal(result.rows[0]?.procedimentos[0], 'TOMOGRAFIA POR EMISSÃO DE PÓSITRONS (PET-CT)');
   });
 
+  it('extrai o CNS com 15 dígitos sem confundi-lo com o nome do paciente', () => {
+    const result = parseSisregLines(
+      [
+        'SISREG',
+        '658150259 Unidade Solicitante: Data/Hora: 25/03/2026 - 15:00',
+        'Procedimento(s): PET-CT Paciente: MARIA DA SILVA CNS: 123 4567 8901 2345 Nascimento: 24/12/1973 Telefone(s): (66) 99202-7503',
+      ],
+      1,
+    );
+
+    assert.equal(result.rows[0]?.nome, 'MARIA DA SILVA');
+    assert.equal(result.rows[0]?.cns, '123456789012345');
+  });
+
   it('remove o rodapé estatístico incorporado ao último nome', () => {
     const result = parseSisregPositionedItems(
       [
         { text: 'SISREG', x: 20, y: 850, page: 1 },
         { text: '652548803', x: 41, y: 700, page: 1 },
         { text: 'Paciente:', x: 166, y: 750, page: 1 },
-        { text: 'JA C I N I RA M A RI A BO A V E N T U RA ESTATÍSTICAS DA PESQUISA: Vagas de 1ª Vez', x: 166, y: 740, page: 1 },
+        {
+          text: 'JA C I N I RA M A RI A BO A V E N T U RA ESTATÍSTICAS DA PESQUISA: Vagas de 1ª Vez',
+          x: 166,
+          y: 740,
+          page: 1,
+        },
         { text: '0 7 /0 6 /1 9 5 4', x: 233, y: 740, page: 1 },
         { text: '(6 5 ) 9 9 2 1 6 - 8 0 8 2', x: 500, y: 740, page: 1 },
         { text: '0 2 /0 3 /2 0 2 6 - 15:00', x: 434, y: 680, page: 1 },
-        { text: 'T O M O G RA FI A P O R E M I SSÃ O D E P Ó SI T RO N S (P E T-C T )', x: 243, y: 670, page: 1 },
+        {
+          text: 'T O M O G RA FI A P O R E M I SSÃ O D E P Ó SI T RO N S (P E T-C T )',
+          x: 243,
+          y: 670,
+          page: 1,
+        },
       ],
       1,
     );

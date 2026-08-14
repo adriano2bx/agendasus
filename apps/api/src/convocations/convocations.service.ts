@@ -8,6 +8,7 @@ export class ConvocationsService {
   async list(input: ConvocationsQueryDto) {
     const createdAt = datePeriod(input.dateFrom, input.dateTo);
     const search = input.query?.trim();
+    const documentSearch = search?.replace(/\D/g, '') ?? '';
     const where = {
       ...(input.campaignId ? { campaignId: input.campaignId } : {}),
       ...(input.status ? { status: input.status as never } : {}),
@@ -32,7 +33,12 @@ export class ConvocationsService {
         ? {
             OR: [
               { patient: { displayName: { contains: search, mode: 'insensitive' as const } } },
-              { patient: { cpf: { contains: search.replace(/\D/g, '') } } },
+              ...(documentSearch
+                ? [
+                    { patient: { cpf: { contains: documentSearch } } },
+                    { patient: { cns: { contains: documentSearch } } },
+                  ]
+                : []),
               { campaign: { name: { contains: search, mode: 'insensitive' as const } } },
               {
                 records: {

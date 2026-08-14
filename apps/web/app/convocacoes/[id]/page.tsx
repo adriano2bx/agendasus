@@ -304,6 +304,7 @@ export default function DetailPage() {
                 value={item.patient.birthDate ? dateOnly(item.patient.birthDate) : 'Não informada'}
               />
               <Detail label="CPF" value={formatCpf(item.patient.cpf)} />
+              <Detail label="CNS" value={formatCns(item.patient.cns)} />
               <Detail
                 label="Solicitações agrupadas"
                 value={`${item.records.length} ${item.records.length === 1 ? 'registro' : 'registros'}`}
@@ -665,6 +666,13 @@ function formatCpf(value?: string | null) {
   const digits = value.replace(/\D/g, '');
   return digits.length === 11
     ? digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+    : value;
+}
+function formatCns(value?: string | null) {
+  if (!value) return '—';
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 15
+    ? digits.replace(/^(\d{3})(\d{4})(\d{4})(\d{4})$/, '$1 $2 $3 $4')
     : value;
 }
 function formatPhone(value?: string | null) {

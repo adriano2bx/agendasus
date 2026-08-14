@@ -163,12 +163,14 @@ model Patient {
   displayName    String         @map("display_name")
   birthDate      DateTime       @map("birth_date") @db.Date
   cpf            String?
+  cns            String?
   createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   phones         PatientPhone[]
   convocations   Convocation[]
 
   @@index([cpf])
+  @@index([cns])
   @@index([normalizedName, birthDate])
   @@map("patients")
 }

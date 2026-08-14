@@ -153,6 +153,10 @@ export class ImportsService {
         name: first.nome,
         birthDate: first.dataNascimento,
         cpf: first.cpf,
+        cns:
+          group
+            .map((row) => row.validated.normalizedCns)
+            .find((value): value is string => Boolean(value)) ?? null,
         rowIds: group.map((row) => row.id),
         recordCount: group.length,
         codes: group.map((row) => row.validated.codigoConvocacaoOrigem).filter(Boolean),
@@ -219,6 +223,7 @@ export class ImportsService {
           input.codigoConvocacaoOrigem?.trim() ?? previous.codigoConvocacaoOrigem,
         nome: input.nome?.trim() ?? previous.nome,
         cpf: input.cpf !== undefined ? input.cpf.trim() || null : previous.cpf,
+        cns: input.cns !== undefined ? input.cns.trim() || null : previous.cns,
         telefones:
           input.telefones?.map((value) => value.trim()).filter(Boolean) ?? previous.telefones,
         procedimentos:

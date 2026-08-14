@@ -145,7 +145,7 @@ function ConvocationsContent() {
               className="input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Paciente, CPF, campanha ou código"
+              placeholder="Paciente, CPF, CNS, campanha ou código"
               aria-label="Buscar convocação"
             />
           </div>

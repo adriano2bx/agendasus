@@ -14,6 +14,7 @@ export interface ParsedSisregRow {
   nome: string | null;
   dataNascimento: string | null;
   cpf: string | null;
+  cns: string | null;
   telefones: string[];
   dataHora: string | null;
   procedimentos: string[];
@@ -38,7 +39,8 @@ export function rebuildLines(items: readonly PositionedText[]): string[] {
 
   for (const item of [...items].sort((a, b) => a.page - b.page || b.y - a.y)) {
     const group = groups.find(
-      (candidate) => candidate[0]?.page === item.page && Math.abs((candidate[0]?.y ?? 0) - item.y) <= 3,
+      (candidate) =>
+        candidate[0]?.page === item.page && Math.abs((candidate[0]?.y ?? 0) - item.y) <= 3,
     );
     if (group) group.push(item);
     else groups.push([item]);
@@ -72,7 +74,12 @@ export function parseSisregLines(lines: readonly string[], pageCount: number): S
   lines.forEach((line, index) => {
     // In the SISREG report the procedure code also has nine digits. A
     // convocation starts at the appointment header, never at "Procedimento".
-    if (line.match(CODE_PATTERN) && !/P[aá]gina|Total/i.test(line) && !/^\s*Procedimento/i.test(line)) starts.push(index);
+    if (
+      line.match(CODE_PATTERN) &&
+      !/P[aá]gina|Total/i.test(line) &&
+      !/^\s*Procedimento/i.test(line)
+    )
+      starts.push(index);
   });
 
   const rows = starts.map((start, rowIndex) => {
@@ -83,10 +90,14 @@ export function parseSisregLines(lines: readonly string[], pageCount: number): S
   const warnings: string[] = [];
   if (layout === 'UNKNOWN') warnings.push('Layout do PDF não reconhecido com segurança.');
   if (reportedPageCount !== null && reportedPageCount > pageCount) {
-    warnings.push(`O documento informa ${reportedPageCount} páginas, mas o arquivo contém ${pageCount}.`);
+    warnings.push(
+      `O documento informa ${reportedPageCount} páginas, mas o arquivo contém ${pageCount}.`,
+    );
   }
   if (totalReported !== null && rows.length < totalReported) {
-    warnings.push(`O SISREG informa ${totalReported} registros, mas ${rows.length} foram encontrados.`);
+    warnings.push(
+      `O SISREG informa ${totalReported} registros, mas ${rows.length} foram encontrados.`,
+    );
   }
   if (rows.length === 0) warnings.push('Nenhum registro de convocação foi identificado.');
 
@@ -97,14 +108,17 @@ function parseRecordBlock(rawText: string, rowNumber: number): ParsedSisregRow {
   const normalized = normalizeSisregSpacing(rawText);
   const code = normalized.match(CODE_PATTERN)?.[0] ?? null;
   const cpf = normalized.match(CPF_PATTERN)?.[0] ?? null;
+  const cns = extractCns(normalized);
   const phones = [...normalized.matchAll(PHONE_PATTERN)]
     .map((match) => match[0].trim())
-    .filter((phone) => phone.replace(/\D/g, '').length >= 10 && (phone.includes('-') || (phone.includes('(') && phone.includes(')'))));
+    .filter(
+      (phone) =>
+        phone.replace(/\D/g, '').length >= 10 &&
+        (phone.includes('-') || (phone.includes('(') && phone.includes(')'))),
+    );
   const dates = extractSpacedDates(rawText);
   const firstTime = extractSpacedTimes(rawText)[0] ?? null;
-  const nameMatch = code
-    ? extractPatientName(normalized)
-    : null;
+  const nameMatch = code ? extractPatientName(normalized) : null;
   const procedureMatch = extractProcedure(normalized);
 
   const row: ParsedSisregRow = {
@@ -116,6 +130,7 @@ function parseRecordBlock(rawText: string, rowNumber: number): ParsedSisregRow {
     // last date in the record block.
     dataNascimento: dates.at(-1) ?? null,
     cpf,
+    cns,
     telefones: [...new Set(phones)],
     dataHora: dates[0] && firstTime ? `${dates[0]} ${firstTime}` : null,
     procedimentos: procedureMatch ? [procedureMatch] : [],
@@ -156,7 +171,12 @@ function extractSpacedTimes(value: string): string[] {
 
 function extractProcedure(value: string): string | null {
   const compact = value.replace(/[\s]/g, '').toLocaleUpperCase('pt-BR');
-  if (compact.includes('TOMOGRAFIA') && compact.includes('EMISS') && compact.includes('PÓSIT') && compact.includes('PET-CT')) {
+  if (
+    compact.includes('TOMOGRAFIA') &&
+    compact.includes('EMISS') &&
+    compact.includes('PÓSIT') &&
+    compact.includes('PET-CT')
+  ) {
     return 'TOMOGRAFIA POR EMISSÃO DE PÓSITRONS (PET-CT)';
   }
   const match = value.match(/Procedimento\(s\):\s*(.+?)(?=\s+Paciente:|$)/i);
@@ -164,15 +184,16 @@ function extractProcedure(value: string): string | null {
 }
 
 function extractPatientName(value: string): string | null {
-  const candidates = [
-    between(value, 'Paciente:', 'CNS:'),
-    between(value, 'CNS:', 'Nascimento:'),
-    between(value, 'Nascimento:', 'Idade:'),
-  ]
+  const candidates = [between(value, 'Paciente:', 'CNS:'), between(value, 'Nascimento:', 'Idade:')]
     .map(cleanName)
     .filter((candidate): candidate is string => Boolean(candidate));
   const candidate = candidates.find((item) => item.replace(/\s/g, '').length >= 4);
   return candidate ?? null;
+}
+
+function extractCns(value: string): string | null {
+  const betweenLabels = between(value, 'CNS:', 'Nascimento:').replace(/\D/g, '');
+  return betweenLabels.length === 15 ? betweenLabels : null;
 }
 
 function between(value: string, start: string, end: string): string {
@@ -190,9 +211,14 @@ function cleanName(value: string): string | null {
     .trim();
   // Join broken glyph runs such as "A D RI A N A" while preserving actual
   // spaces where the PDF supplies them.
-  const joined = withoutNumbers.replace(/\b(?:[A-ZÀ-Ý]{1,2}\s+){2,}[A-ZÀ-Ý]{1,4}\b/g, (part) => part.replace(/\s+/g, ''));
+  const joined = withoutNumbers.replace(/\b(?:[A-ZÀ-Ý]{1,2}\s+){2,}[A-ZÀ-Ý]{1,4}\b/g, (part) =>
+    part.replace(/\s+/g, ''),
+  );
   const words = joined.match(/[A-ZÀ-Ý][A-ZÀ-Ý'’-]*/gi) ?? [];
-  const result = words.filter((word) => !['MT', 'GO', 'JATAI', 'CUIABA'].includes(word.toUpperCase())).join(' ').trim();
+  const result = words
+    .filter((word) => !['MT', 'GO', 'JATAI', 'CUIABA'].includes(word.toUpperCase()))
+    .join(' ')
+    .trim();
   return result.length >= 4 ? result : null;
 }
 
@@ -225,10 +251,15 @@ export async function parseSisregPdf(data: Uint8Array): Promise<SisregParseResul
  * Reading only linear text interleaves columns, so this parser keeps the PDF
  * coordinates as the source of truth for the real SISREG_V1 layout.
  */
-export function parseSisregPositionedItems(items: readonly PositionedText[], pageCount: number): SisregParseResult {
+export function parseSisregPositionedItems(
+  items: readonly PositionedText[],
+  pageCount: number,
+): SisregParseResult {
   const lines = rebuildLines(items);
   const fullText = lines.join('\n');
-  const layout = /SISREG|Sistema Nacional de Regula[cç][aã]o/i.test(fullText) ? 'SISREG_V1' : 'UNKNOWN';
+  const layout = /SISREG|Sistema Nacional de Regula[cç][aã]o/i.test(fullText)
+    ? 'SISREG_V1'
+    : 'UNKNOWN';
   const codes = items
     .filter((item) => item.x < 85 && /^\d{7,12}$/.test(item.text.trim()))
     .sort((left, right) => left.page - right.page || right.y - left.y);
@@ -239,14 +270,24 @@ export function parseSisregPositionedItems(items: readonly PositionedText[], pag
     // above its code prevents header labels from being treated as a patient.
     const upper = previous?.page === code.page ? (previous.y + code.y) / 2 : code.y + 60;
     const lower = next?.page === code.page ? (next.y + code.y) / 2 : Number.NEGATIVE_INFINITY;
-    const block = items.filter((item) => item.page === code.page && item.y <= upper && item.y >= lower && item.text.trim());
+    const block = items.filter(
+      (item) => item.page === code.page && item.y <= upper && item.y >= lower && item.text.trim(),
+    );
     const row = parsePositionedRecord(code, block, index + 1);
     if (row.procedimentos.length === 0) {
       const procedureLabel = items
-        .filter((item) => item.page === code.page && /Procedimento\(s\):/i.test(item.text) && Math.abs(item.y - code.y) < 100)
+        .filter(
+          (item) =>
+            item.page === code.page &&
+            /Procedimento\(s\):/i.test(item.text) &&
+            Math.abs(item.y - code.y) < 100,
+        )
         .sort((left, right) => Math.abs(left.y - code.y) - Math.abs(right.y - code.y))[0];
       if (procedureLabel) {
-        const adjacentProcedure = items.filter((item) => item.page === code.page && Math.abs(item.y - procedureLabel.y) <= 3).map((item) => item.text).join(' ');
+        const adjacentProcedure = items
+          .filter((item) => item.page === code.page && Math.abs(item.y - procedureLabel.y) <= 3)
+          .map((item) => item.text)
+          .join(' ');
         const procedure = extractProcedure(adjacentProcedure);
         if (procedure) {
           row.procedimentos = [procedure];
@@ -257,47 +298,86 @@ export function parseSisregPositionedItems(items: readonly PositionedText[], pag
     // A page can end between the patient card and its scheduling/procedure
     // rows. Attach only the top continuation area of the next page.
     if (next && next.page > code.page) {
-      const continuation = items.filter((item) => item.page === next.page && item.y > next.y && item.text.trim());
-      const continuationSchedule = continuation.filter((item) => item.x >= 425 && item.x < 500).map((item) => item.text).join(' ');
+      const continuation = items.filter(
+        (item) => item.page === next.page && item.y > next.y && item.text.trim(),
+      );
+      const continuationSchedule = continuation
+        .filter((item) => item.x >= 425 && item.x < 500)
+        .map((item) => item.text)
+        .join(' ');
       const continuationDate = extractSpacedDates(continuationSchedule)[0];
       const continuationTime = extractSpacedTimes(continuationSchedule)[0];
-      const continuationProcedure = extractProcedure(continuation.filter((item) => item.x >= 225 && item.x < 490).map((item) => item.text).join(' '));
-      if (!row.dataHora && continuationDate && continuationTime) row.dataHora = `${continuationDate} ${continuationTime}`;
-      if (row.procedimentos.length === 0 && continuationProcedure) row.procedimentos = [continuationProcedure];
-      row.issues = row.issues.filter((issue) => !(issue === 'Data/hora ausente.' && row.dataHora) && !(issue === 'Procedimento ausente.' && row.procedimentos.length > 0));
+      const continuationProcedure = extractProcedure(
+        continuation
+          .filter((item) => item.x >= 225 && item.x < 490)
+          .map((item) => item.text)
+          .join(' '),
+      );
+      if (!row.dataHora && continuationDate && continuationTime)
+        row.dataHora = `${continuationDate} ${continuationTime}`;
+      if (row.procedimentos.length === 0 && continuationProcedure)
+        row.procedimentos = [continuationProcedure];
+      row.issues = row.issues.filter(
+        (issue) =>
+          !(issue === 'Data/hora ausente.' && row.dataHora) &&
+          !(issue === 'Procedimento ausente.' && row.procedimentos.length > 0),
+      );
     }
     return row;
   });
   const pagination = fullText.match(/P[aá]gina\s+\d+\s+de\s+(\d+)/i);
-  const reportedTotal = fullText.match(/(?:Resultados por p[aá]gina|Total|Quantidade)\D{0,20}(\d{1,7})/i);
+  const reportedTotal = fullText.match(
+    /(?:Resultados por p[aá]gina|Total|Quantidade)\D{0,20}(\d{1,7})/i,
+  );
   const warnings: string[] = [];
   const reportedPageCount = pagination?.[1] ? Number(pagination[1]) : null;
   const totalReported = reportedTotal?.[1] ? Number(reportedTotal[1]) : null;
   if (layout === 'UNKNOWN') warnings.push('Layout do PDF não reconhecido com segurança.');
-  if (reportedPageCount !== null && reportedPageCount > pageCount) warnings.push(`O documento informa ${reportedPageCount} páginas, mas o arquivo contém ${pageCount}.`);
+  if (reportedPageCount !== null && reportedPageCount > pageCount)
+    warnings.push(
+      `O documento informa ${reportedPageCount} páginas, mas o arquivo contém ${pageCount}.`,
+    );
   if (rows.length === 0) warnings.push('Nenhum registro de convocação foi identificado.');
   return { layout, pageCount, reportedPageCount, totalReported, rows, warnings };
 }
 
-function parsePositionedRecord(code: PositionedText, block: readonly PositionedText[], rowNumber: number): ParsedSisregRow {
-  const at = (min: number, max: number) => block.filter((item) => item.x >= min && item.x < max).sort((left, right) => right.y - left.y);
+function parsePositionedRecord(
+  code: PositionedText,
+  block: readonly PositionedText[],
+  rowNumber: number,
+): ParsedSisregRow {
+  const at = (min: number, max: number) =>
+    block.filter((item) => item.x >= min && item.x < max).sort((left, right) => right.y - left.y);
   const nameParts = at(150, 230)
     .filter((item) => !/Paciente:/i.test(item.text))
     .map((item) => compactName(item.text))
     .filter(Boolean);
-  const birth = at(225, 295).map((item) => extractSpacedDates(item.text)[0]).find(Boolean) ?? null;
+  const birth =
+    at(225, 295)
+      .map((item) => extractSpacedDates(item.text)[0])
+      .find(Boolean) ?? null;
   const phone = at(490, 560).flatMap((item) => extractPhones(normalizeSisregSpacing(item.text)));
-  const schedule = at(425, 500).map((item) => item.text).join(' ');
+  const schedule = at(425, 500)
+    .map((item) => item.text)
+    .join(' ');
   const scheduleDates = extractSpacedDates(schedule);
   const scheduleTime = extractSpacedTimes(schedule)[0] ?? null;
-  const procedureText = at(225, 490).map((item) => item.text).join(' ');
+  const procedureText = at(225, 490)
+    .map((item) => item.text)
+    .join(' ');
+  const rawText = [...block]
+    .sort((left, right) => right.y - left.y || left.x - right.x)
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join(' ');
   const row: ParsedSisregRow = {
     rowNumber,
-    rawText: [...block].sort((left, right) => right.y - left.y || left.x - right.x).map((item) => item.text.trim()).filter(Boolean).join(' '),
+    rawText,
     codigoConvocacaoOrigem: code.text.trim(),
     nome: nameParts.length ? nameParts.join(' ') : null,
     dataNascimento: birth,
     cpf: null,
+    cns: extractCns(normalizeSisregSpacing(rawText)),
     telefones: [...new Set(phone)],
     dataHora: scheduleDates[0] && scheduleTime ? `${scheduleDates[0]} ${scheduleTime}` : null,
     procedimentos: extractProcedure(procedureText) ? [extractProcedure(procedureText)!] : [],
@@ -367,5 +447,9 @@ function alignmentKey(value: string): string {
 function extractPhones(value: string): string[] {
   return [...value.matchAll(PHONE_PATTERN)]
     .map((match) => match[0].trim())
-    .filter((phone) => phone.replace(/\D/g, '').length >= 10 && (phone.includes('-') || (phone.includes('(') && phone.includes(')'))));
+    .filter(
+      (phone) =>
+        phone.replace(/\D/g, '').length >= 10 &&
+        (phone.includes('-') || (phone.includes('(') && phone.includes(')'))),
+    );
 }

@@ -9,6 +9,7 @@ export interface ImportedRowData {
   nome: string | null;
   dataNascimento: string | null;
   cpf: string | null;
+  cns: string | null;
   telefones: string[];
   dataHora: string | null;
   procedimentos: string[];
@@ -20,6 +21,7 @@ export interface ValidatedImportRow extends ImportedRowData {
   birthDate: Date | null;
   scheduledAt: Date | null;
   normalizedCpf: string | null;
+  normalizedCns: string | null;
   phones: ReturnType<typeof normalizeBrazilianPhone>[];
   issues: string[];
 }
@@ -32,6 +34,7 @@ export function readImportedRow(value: unknown): ImportedRowData {
     nome: typeof data.nome === 'string' ? data.nome : null,
     dataNascimento: typeof data.dataNascimento === 'string' ? data.dataNascimento : null,
     cpf: typeof data.cpf === 'string' ? data.cpf : null,
+    cns: typeof data.cns === 'string' ? data.cns : null,
     telefones: Array.isArray(data.telefones)
       ? data.telefones.filter((item): item is string => typeof item === 'string')
       : [],
@@ -151,6 +154,7 @@ export function validateImportedRow(value: unknown): ValidatedImportRow {
   const phones = row.telefones.map(normalizeBrazilianPhone);
   const selectedPhone = row.selectedPhone ? normalizeBrazilianPhone(row.selectedPhone) : null;
   const normalizedCpf = row.cpf?.replace(/\D/g, '') || null;
+  const normalizedCns = row.cns?.replace(/\D/g, '') || null;
   const issues: string[] = [];
 
   if (!row.codigoConvocacaoOrigem) issues.push('Código da convocação ausente.');
@@ -169,6 +173,7 @@ export function validateImportedRow(value: unknown): ValidatedImportRow {
   if (!scheduledAt) issues.push('Data/hora inválida ou ausente.');
   if (row.procedimentos.length === 0) issues.push('Procedimento ausente.');
   if (normalizedCpf && normalizedCpf.length !== 11) issues.push('CPF inválido.');
+  if (normalizedCns && normalizedCns.length !== 15) issues.push('CNS inválido.');
 
   return {
     ...row,
@@ -176,6 +181,7 @@ export function validateImportedRow(value: unknown): ValidatedImportRow {
     birthDate,
     scheduledAt,
     normalizedCpf: normalizedCpf?.length === 11 ? normalizedCpf : null,
+    normalizedCns: normalizedCns?.length === 15 ? normalizedCns : null,
     phones,
     issues,
   };

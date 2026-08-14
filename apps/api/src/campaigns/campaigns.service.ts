@@ -66,8 +66,15 @@ export class CampaignsService {
         if (!first) continue;
         const row = readImportedRow(first.importRow.normalizedData);
         if (!row.nome || !row.dataNascimento) continue;
+        const importedRows = records.map((record) =>
+          readImportedRow(record.importRow.normalizedData),
+        );
         const birthDate = new Date(`${toIsoDate(row.dataNascimento)}T00:00:00.000Z`);
         const cpf = row.cpf?.replace(/\D/g, '') || null;
+        const cns =
+          importedRows
+            .map((value) => value.cns?.replace(/\D/g, ''))
+            .find((value) => value?.length === 15) ?? null;
         const normalizedName = normalizePatientName(row.nome);
         const existingPatient = await transaction.patient.findFirst({
           where: cpf ? { cpf } : { normalizedName, birthDate },
@@ -75,15 +82,23 @@ export class CampaignsService {
         const patient = existingPatient
           ? await transaction.patient.update({
               where: { id: existingPatient.id },
-              data: { displayName: row.nome, normalizedName, ...(cpf ? { cpf } : {}) },
+              data: {
+                displayName: row.nome,
+                normalizedName,
+                ...(cpf ? { cpf } : {}),
+                ...(cns ? { cns } : {}),
+              },
             })
           : await transaction.patient.create({
-              data: { displayName: row.nome, normalizedName, birthDate, ...(cpf ? { cpf } : {}) },
+              data: {
+                displayName: row.nome,
+                normalizedName,
+                birthDate,
+                ...(cpf ? { cpf } : {}),
+                ...(cns ? { cns } : {}),
+              },
             });
 
-        const importedRows = records.map((record) =>
-          readImportedRow(record.importRow.normalizedData),
-        );
         const allPhones = importedRows.flatMap((value) => value.telefones);
         const normalizedPhones = allPhones.map(normalizeBrazilianPhone);
         const requestedPhone = importedRows

@@ -22,6 +22,7 @@ type RowData = {
   nome?: string | null;
   dataNascimento?: string | null;
   cpf?: string | null;
+  cns?: string | null;
   telefones?: string[];
   dataHora?: string | null;
   procedimentos?: string[];
@@ -39,6 +40,7 @@ type PatientGroup = {
   name: string | null;
   birthDate: string | null;
   cpf: string | null;
+  cns: string | null;
   rowIds: string[];
   recordCount: number;
   codes: string[];
@@ -71,6 +73,13 @@ type Review = {
   patientGroups: PatientGroup[];
 };
 type Notice = { tone: 'success' | 'error' | 'notice'; text: string } | null;
+
+function formatCns(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length === 15
+    ? digits.replace(/^(\d{3})(\d{4})(\d{4})(\d{4})$/, '$1 $2 $3 $4')
+    : value;
+}
 
 export default function ImportReviewPage() {
   const params = useParams<{ id: string }>();
@@ -153,6 +162,7 @@ export default function ImportReviewPage() {
           nome: data.get('nome'),
           dataNascimento: data.get('dataNascimento'),
           cpf: data.get('cpf'),
+          cns: data.get('cns'),
           telefones: String(data.get('telefones') ?? '')
             .split(/\n|,/)
             .map((v) => v.trim())
@@ -216,7 +226,7 @@ export default function ImportReviewPage() {
     () =>
       (review?.rows ?? []).filter((row) => {
         const text =
-          `${row.data?.nome ?? ''} ${row.data?.codigoConvocacaoOrigem ?? ''} ${(row.data?.procedimentos ?? []).join(' ')}`.toLowerCase();
+          `${row.data?.nome ?? ''} ${row.data?.cpf ?? ''} ${row.data?.cns ?? ''} ${row.data?.codigoConvocacaoOrigem ?? ''} ${(row.data?.procedimentos ?? []).join(' ')}`.toLowerCase();
         return (
           (!query || text.includes(query.toLowerCase())) &&
           (!onlyIssues || row.validationStatus !== 'VALID')
@@ -401,7 +411,7 @@ function RecordsReview({
               className="input"
               value={query}
               onChange={(event) => onQuery(event.target.value)}
-              placeholder="Buscar paciente, código ou procedimento"
+              placeholder="Buscar paciente, CPF, CNS, código ou procedimento"
             />
           </div>
           <label className="checkbox-control">
@@ -436,6 +446,7 @@ function RecordsReview({
                     <div className="cell-main">
                       <strong>{row.data?.nome || 'Não identificado'}</strong>
                       <small>{row.data?.dataNascimento || 'Nascimento ausente'}</small>
+                      {row.data?.cns ? <small>CNS {formatCns(row.data.cns)}</small> : null}
                       {row.validationIssues?.map((issue) => (
                         <small className="danger-text" key={issue}>
                           {issue}
@@ -531,6 +542,7 @@ function PatientsReview({
                 <span>
                   {group.birthDate || 'Nascimento ausente'}
                   {group.cpf ? ` · CPF ${group.cpf}` : ''}
+                  {group.cns ? ` · CNS ${formatCns(group.cns)}` : ''}
                 </span>
               </div>
               <div>
@@ -605,6 +617,7 @@ function EditRowModal({
             required
           />
           <Field label="CPF (opcional)" name="cpf" defaultValue={data.cpf ?? ''} />
+          <Field label="CNS (opcional)" name="cns" defaultValue={data.cns ?? ''} />
           <Field
             label="Código da convocação"
             name="codigoConvocacaoOrigem"
