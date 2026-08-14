@@ -118,4 +118,37 @@ describe('parser SISREG', () => {
 
     assert.equal(result.rows[0]?.nome, 'PACIENTE TESTE CONFIRMA');
   });
+
+  it('reconhece o layout Consulta de Agenda de Profissional do SISREG', () => {
+    const result = parseSisregPositionedItems(
+      [
+        { text: 'Confirmação de Agendas', x: 240, y: 800, page: 1 },
+        { text: 'CONSULTA DE AGENDA DE PROFISSIONAL', x: 120, y: 780, page: 1 },
+        { text: '720000001', x: 18, y: 500, page: 1 },
+        { text: 'CNS:', x: 78, y: 520, page: 1 },
+        { text: '7 0 0 0 0 1 8 7 2 8 9 3 7 0 2', x: 78, y: 512, page: 1 },
+        { text: 'Paciente:', x: 151, y: 520, page: 1 },
+        { text: 'PACIENTE TESTE', x: 151, y: 512, page: 1 },
+        { text: 'Nascimento:', x: 225, y: 520, page: 1 },
+        { text: '0 1 /0 1 /1 9 8 0', x: 225, y: 512, page: 1 },
+        { text: 'Telefone(s):', x: 520, y: 520, page: 1 },
+        { text: '(6 5 ) 9 9 9 9 9 - 9 9 9 9', x: 520, y: 512, page: 1 },
+        { text: 'Data/Hora:', x: 447, y: 490, page: 1 },
+        { text: '2 0 /0 8 /2 0 2 6 - Q U I -', x: 447, y: 482, page: 1 },
+        { text: '0 7 :0 0', x: 447, y: 474, page: 1 },
+        { text: '01', x: 225, y: 460, page: 1 },
+        { text: '- EXAME DE IMAGEM (0208010033)', x: 234, y: 460, page: 1 },
+        { text: 'Procedimento(s):', x: 86, y: 455, page: 1 },
+      ],
+      1,
+    );
+
+    assert.equal(result.layout, 'SISREG_V2');
+    assert.equal(result.rows.length, 1);
+    assert.equal(result.rows[0]?.nome, 'PACIENTE TESTE');
+    assert.equal(result.rows[0]?.cns, '700001872893702');
+    assert.equal(result.rows[0]?.dataHora, '20/08/2026 07:00');
+    assert.equal(result.rows[0]?.procedimentos[0], '01 - EXAME DE IMAGEM (0208010033)');
+    assert.deepEqual(result.rows[0]?.issues, []);
+  });
 });
