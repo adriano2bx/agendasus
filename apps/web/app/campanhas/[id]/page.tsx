@@ -119,6 +119,25 @@ export default function CampaignDetailPage() {
     }
   }
 
+  async function abortCampaign() {
+    if (!item || !window.confirm('Abortar este fluxo? Nenhum novo disparo será realizado.')) return;
+    setSaving(true);
+    setFeedback(null);
+    try {
+      const response = await authFetch(`${API}/campaigns/${item.id}/cancel`, { method: 'POST' });
+      if (!response.ok) throw new Error(await errorOf(response));
+      await load();
+      setFeedback({ tone: 'success', text: 'Fluxo abortado com sucesso.' });
+    } catch (cause) {
+      setFeedback({
+        tone: 'error',
+        text: cause instanceof Error ? cause.message : 'Não foi possível abortar o fluxo.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (!item)
     return (
       <AppShell title="Detalhe da campanha">
@@ -152,6 +171,15 @@ export default function CampaignDetailPage() {
           <Link className="button" href={`/convocacoes?campaignId=${item.id}`}>
             Ver pacientes
           </Link>
+          {!['CANCELLED', 'COMPLETED'].includes(item.status) ? (
+            <button
+              className="button danger ghost"
+              disabled={saving}
+              onClick={() => void abortCampaign()}
+            >
+              {item.status === 'DRAFT' ? 'Abortar fluxo' : 'Cancelar campanha'}
+            </button>
+          ) : null}
         </>
       }
     >
@@ -401,7 +429,9 @@ function EditForm({
         </div>
       </div>
       <div className="field">
-        <label htmlFor="campaign-final-response-days">Prazo após a terceira convocação (dias)</label>
+        <label htmlFor="campaign-final-response-days">
+          Prazo após a terceira convocação (dias)
+        </label>
         <input
           id="campaign-final-response-days"
           name="finalResponseWindowDays"
