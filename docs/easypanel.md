@@ -16,7 +16,7 @@ Defina em `confirma-api` e `confirma-worker`:
 
 ```text
 NODE_ENV=production
-APP_TIMEZONE=America/Cuiaba
+APP_TIMEZONE=America/Sao_Paulo
 DATABASE_URL=<URL interna do PostgreSQL com ?schema=public>
 REDIS_URL=<URL interna do Redis>
 JWT_SECRET=<texto aleatório com no mínimo 32 caracteres>
@@ -57,7 +57,7 @@ Defina exclusivamente no `confirma-web`:
 
 ```text
 NEXT_PUBLIC_API_URL=https://api.seu-dominio.com/api
-NEXT_PUBLIC_APP_TIMEZONE=America/Cuiaba
+NEXT_PUBLIC_APP_TIMEZONE=America/Sao_Paulo
 ```
 
 Como variáveis `NEXT_PUBLIC_*` são incorporadas durante a compilação do Next.js,

@@ -133,5 +133,5 @@ async function responseBody(response: Response): Promise<unknown> {
   const text = (await response.text()).slice(0, 10_000);
   try { return JSON.parse(text); } catch { return text || null; }
 }
-function formatDate(value: Date): string { return new Intl.DateTimeFormat('pt-BR', { timeZone: process.env.APP_TIMEZONE ?? 'America/Cuiaba' }).format(value); }
-function formatDateTime(value: string): string { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: process.env.APP_TIMEZONE ?? 'America/Cuiaba' }).format(new Date(value)); }
+function formatDate(value: Date): string { return new Intl.DateTimeFormat('pt-BR', { timeZone: process.env.APP_TIMEZONE ?? 'America/Sao_Paulo' }).format(value); }
+function formatDateTime(value: string): string { return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: process.env.APP_TIMEZONE ?? 'America/Sao_Paulo' }).format(new Date(value)); }

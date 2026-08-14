@@ -1,4 +1,4 @@
-export const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIMEZONE ?? 'America/Cuiaba';
+export const APP_TIME_ZONE = process.env.NEXT_PUBLIC_APP_TIMEZONE ?? 'America/Sao_Paulo';
 
 const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
   dateStyle: 'short',

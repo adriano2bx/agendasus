@@ -8,7 +8,7 @@ import { processWebhook } from './webhook-worker.js';
 import { processHandoff } from './handoff-worker.js';
 import { parseSisregPdf } from './sisreg-parser.js';
 
-const timezone = process.env.APP_TIMEZONE ?? 'America/Cuiaba';
+const timezone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
 process.env.TZ = timezone;
 
 const importConnection = createRedisConnection();

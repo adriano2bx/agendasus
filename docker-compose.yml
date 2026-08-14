@@ -5,7 +5,7 @@ services:
       POSTGRES_DB: confirma_sus
       POSTGRES_USER: confirma
       POSTGRES_PASSWORD: confirma
-      TZ: ${APP_TIMEZONE:-America/Cuiaba}
+      TZ: ${APP_TIMEZONE:-America/Sao_Paulo}
     ports:
       - "5432:5432"
     volumes:
@@ -32,4 +32,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-
