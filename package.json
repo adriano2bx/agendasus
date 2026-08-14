@@ -12,6 +12,7 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "load:test": "node tests/load/load-test.mjs",
+    "load:e2e": "node tests/load/e2e-campaign-test.mjs",
     "typecheck": "pnpm -r typecheck",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",

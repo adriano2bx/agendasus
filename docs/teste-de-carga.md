@@ -59,3 +59,20 @@ Não use a URL de produção sem janela de manutenção, monitoramento e aprova�
 ## Interpretação
 
 Como referência inicial para homologação, compare execuções com 5, 10 e 25 workers. Observe especialmente P95/P99, taxa de erro, crescimento da fila BullMQ, uso de CPU/memória e conexões do PostgreSQL. O resultado não é um certificado de capacidade: os limites finais dependem do tamanho dos PDFs, volume de registros, configuração da VPS, Redis, PostgreSQL e limites da Gupshup.
+
+## Teste e2e da campanha
+
+Para exercitar importação, parser, agrupamento, criação de campanha, scheduler e worker, use o cenário e2e. Ele exige uma confirmação explícita de que o worker está em `MESSAGING_MODE=DRY_RUN` e cancela a campanha ao terminar:
+
+```bash
+LOAD_TEST_BASE_URL=http://127.0.0.1:3001/api \
+LOAD_TEST_E2E_CONFIRM=DRY_RUN_ONLY \
+LOAD_TEST_EMAIL=usuario@exemplo.com.br \
+LOAD_TEST_PASSWORD='senha-de-homologacao' \
+LOAD_TEST_PDF=test-data/Pacientes_Simulados_Confirma_SUS.pdf \
+pnpm load:e2e
+```
+
+O cenário aguarda a extração do PDF, aprova a importação, agenda a primeira tentativa para cerca de 20 segundos depois e aguarda o processamento das mensagens esperadas. `LOAD_TEST_E2E_KEEP_CAMPAIGN=true` mantém a campanha programada para inspeção; use isso somente em homologação.
+
+Esse cenário mede o fluxo completo da primeira tentativa. As regras de segunda e terceira tentativa exigem intervalos mínimos de um dia na API e devem ser validadas com uma campanha de homologação separada.
