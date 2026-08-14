@@ -99,6 +99,22 @@ export class DashboardService {
       ...failedMessageConvocations.map((item) => item.convocationId),
       ...sendErrorConvocations.map((item) => item.id),
     ]);
+    const stageStatus = new Map<string, Record<string, number>>();
+    for (const item of stageByStatus) {
+      const values = stageStatus.get(item.stage) ?? {};
+      stageStatus.set(item.stage, values);
+      values[item.status] = item._count._all;
+    }
+    const cumulativeStageByStatus = [...stageStatus.entries()].flatMap(([stage, values]) => [
+      {
+        stage,
+        status: 'SENT',
+        count: (values.SENT ?? 0) + (values.DELIVERED ?? 0) + (values.READ ?? 0),
+      },
+      { stage, status: 'DELIVERED', count: (values.DELIVERED ?? 0) + (values.READ ?? 0) },
+      { stage, status: 'READ', count: values.READ ?? 0 },
+      ...(values.FAILED ? [{ stage, status: 'FAILED', count: values.FAILED }] : []),
+    ]);
     return {
       activeCampaigns,
       pausedCampaigns,
@@ -111,11 +127,7 @@ export class DashboardService {
       messageByStatus: Object.fromEntries(
         messageByStatus.map((item) => [item.status, item._count._all]),
       ),
-      stageByStatus: stageByStatus.map((item) => ({
-        stage: item.stage,
-        status: item.status,
-        count: item._count._all,
-      })),
+      stageByStatus: cumulativeStageByStatus,
       generatedAt: new Date(),
     };
   }
