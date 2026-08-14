@@ -4,6 +4,7 @@ set -eu
 
 export PORT="${WEB_PORT:-${PORT:-3000}}"
 export API_PORT="${API_PORT:-3001}"
+export HOSTNAME="${WEB_HOSTNAME:-0.0.0.0}"
 
 mkdir -p "${UPLOAD_TEMP_DIR:-/tmp/confirma-sus}"
 
