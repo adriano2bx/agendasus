@@ -28,7 +28,10 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
     await prisma.$transaction([
       prisma.user.updateMany({
         where: { email: { not: email }, role: 'ADMIN' },
-        data: { role: 'OPERATOR' },
+        // The deployment variables define the only administrator account.
+        // When ADMIN_EMAIL changes, retaining the previous credentials as an
+        // active operator would keep an unexpected login path alive.
+        data: { role: 'OPERATOR', active: false },
       }),
       prisma.user.upsert({
         where: { email },
