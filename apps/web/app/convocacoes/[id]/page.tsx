@@ -1,18 +1,211 @@
 'use client';
 import Link from 'next/link';
-import { useEffect,useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '../../components/navigation';
-import { Icon,StatusBadge } from '../../components/ui';
+import { Icon, StatusBadge } from '../../components/ui';
 import { authFetch } from '../../lib/api';
-const API=process.env.NEXT_PUBLIC_API_URL??'http://localhost:3001/api';
-export default function DetailPage(){const{id}=useParams<{id:string}>();const[item,setItem]=useState<any>();const[error,setError]=useState('');useEffect(()=>{authFetch(`${API}/convocations/${id}`).then(async r=>{if(!r.ok)throw new Error();setItem(await r.json());}).catch(()=>setError('Não foi possível carregar esta convocação.'));},[id]);if(!item)return <AppShell title="Detalhe da convocação">{error?<p className="error">{error}</p>:<p className="muted">Carregando…</p>}</AppShell>;const events=[...item.messages.map((m:any)=>({id:m.id,title:`${stage(m.stage)} · ${messageStatus(m.status)}`,date:m.createdAt,type:'message'})),...item.responses.map((r:any)=>({id:r.id,title:`Resposta: ${r.action==='CONFIRM'?'Confirmou':'Cancelou'}`,date:r.receivedAt,type:'response'}))].sort((a:any,b:any)=>new Date(b.date).getTime()-new Date(a.date).getTime());return <AppShell title={item.patient.displayName} eyebrow="Detalhe da convocação" actions={<><Link className="button secondary" href="/convocacoes">Voltar</Link><button className="button secondary">Ações</button></>}>
-  <div className="actions" style={{marginBottom:18}}><StatusBadge value={item.status}/><span className="badge">{stage(item.stage)}</span><span className="muted">Campanha: {item.campaign.name}</span></div>
-  <section className="grid-main"><div style={{display:'grid',gap:18}}><section className="grid two"><article className="panel"><header className="panel-header"><h2>Dados do paciente</h2></header><div className="panel-body"><Detail label="Nome completo" value={item.patient.displayName}/><Detail label="Data de nascimento" value={item.patient.birthDate?new Date(item.patient.birthDate).toLocaleDateString('pt-BR'):'—'}/><Detail label="CPF" value={item.patient.cpf??'—'}/></div></article><article className="panel"><header className="panel-header"><h2>Telefones</h2></header><div className="panel-body">{item.patient.phones.map((phone:any,index:number)=><Detail key={phone.id??phone.normalizedValue} label={index===0?'Principal':'Alternativo'} value={`+${phone.normalizedValue}`}/>)}</div></article></section>
-  <article className="panel"><header className="panel-header"><h2>Mensagens e respostas</h2><span className="badge">{item.messages.length} tentativas</span></header><div className="table-wrap"><table><thead><tr><th>Etapa</th><th>Template</th><th>Status</th><th>Submetida</th><th>Entregue</th><th>Lida</th></tr></thead><tbody>{item.messages.map((m:any)=><tr key={m.id}><td>{stage(m.stage)}</td><td>{m.templateName}</td><td><StatusBadge value={m.status}/></td><td>{date(m.submittedAt??m.createdAt)}</td><td>{date(m.deliveredAt)}</td><td>{date(m.readAt)}</td></tr>)}</tbody></table></div></article>
-  </div><aside style={{display:'grid',gap:18}}><article className="panel"><header className="panel-header"><h2>Processo</h2></header><div className="panel-body"><Detail label="Campanha" value={item.campaign.name}/><Detail label="Etapa atual" value={stage(item.stage)}/><Detail label="Próxima ação" value={item.nextActionAt?date(item.nextActionAt):'Nenhuma ação programada'}/>{['CONFIRMED','CANCELLED','FINISHED_NO_RESPONSE'].includes(item.status)?<p className="success"><Icon name="check"/>Fluxo finalizado</p>:null}</div></article><article className="panel"><header className="panel-header"><h2>Histórico</h2></header><div className="panel-body"><ol className="timeline">{events.map((event:any)=><li className="timeline-item" key={event.id}><span className="timeline-dot"/><span className="timeline-copy"><strong>{event.title}</strong><small>{date(event.date)}</small></span></li>)}{!events.length?<p className="muted">Nenhum evento registrado.</p>:null}</ol></div></article></aside></section>
-  </AppShell>;}
-function Detail({label,value}:{label:string;value:string}){return <div className="row"><small className="stat-label">{label}</small><strong>{value}</strong></div>;}
-function date(value?:string|null){return value?new Date(value).toLocaleString('pt-BR'):'—';}
-function stage(value:string){return ({FIRST:'1ª convocação',SECOND:'2ª convocação',THIRD:'3ª convocação',FINISHED:'Finalizada'} as Record<string,string>)[value]??value;}
-function messageStatus(value:string){return ({QUEUED:'Na fila',PROCESSING:'Processando',SUBMITTED:'Submetida',SENT:'Enviada',DELIVERED:'Entregue',READ:'Lida',FAILED:'Falhou'} as Record<string,string>)[value]??value;}
+import { formatDateTime } from '../../lib/date-time';
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+export default function DetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const [item, setItem] = useState<any>();
+  const [error, setError] = useState('');
+  useEffect(() => {
+    authFetch(`${API}/convocations/${id}`)
+      .then(async (r) => {
+        if (!r.ok) throw new Error();
+        setItem(await r.json());
+      })
+      .catch(() => setError('Não foi possível carregar esta convocação.'));
+  }, [id]);
+  if (!item)
+    return (
+      <AppShell title="Detalhe da convocação">
+        {error ? <p className="error">{error}</p> : <p className="muted">Carregando…</p>}
+      </AppShell>
+    );
+  const events = [
+    ...item.messages.map((m: any) => ({
+      id: m.id,
+      title: `${stage(m.stage)} · ${messageStatus(m.status)}`,
+      date: m.createdAt,
+      type: 'message',
+    })),
+    ...item.responses.map((r: any) => ({
+      id: r.id,
+      title: `Resposta: ${r.action === 'CONFIRM' ? 'Confirmou' : 'Cancelou'}`,
+      date: r.receivedAt,
+      type: 'response',
+    })),
+  ].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  return (
+    <AppShell
+      title={item.patient.displayName}
+      eyebrow="Detalhe da convocação"
+      actions={
+        <>
+          <Link className="button secondary" href="/convocacoes">
+            Voltar
+          </Link>
+          <button className="button secondary">Ações</button>
+        </>
+      }
+    >
+      <div className="actions" style={{ marginBottom: 18 }}>
+        <StatusBadge value={item.status} />
+        <span className="badge">{stage(item.stage)}</span>
+        <span className="muted">Campanha: {item.campaign.name}</span>
+      </div>
+      <section className="grid-main">
+        <div style={{ display: 'grid', gap: 18 }}>
+          <section className="grid two">
+            <article className="panel">
+              <header className="panel-header">
+                <h2>Dados do paciente</h2>
+              </header>
+              <div className="panel-body">
+                <Detail label="Nome completo" value={item.patient.displayName} />
+                <Detail
+                  label="Data de nascimento"
+                  value={
+                    item.patient.birthDate
+                      ? new Date(item.patient.birthDate).toLocaleDateString('pt-BR')
+                      : '—'
+                  }
+                />
+                <Detail label="CPF" value={item.patient.cpf ?? '—'} />
+              </div>
+            </article>
+            <article className="panel">
+              <header className="panel-header">
+                <h2>Telefones</h2>
+              </header>
+              <div className="panel-body">
+                {item.patient.phones.map((phone: any, index: number) => (
+                  <Detail
+                    key={phone.id ?? phone.normalizedValue}
+                    label={index === 0 ? 'Principal' : 'Alternativo'}
+                    value={`+${phone.normalizedValue}`}
+                  />
+                ))}
+              </div>
+            </article>
+          </section>
+          <article className="panel">
+            <header className="panel-header">
+              <h2>Mensagens e respostas</h2>
+              <span className="badge">{item.messages.length} tentativas</span>
+            </header>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Etapa</th>
+                    <th>Template</th>
+                    <th>Status</th>
+                    <th>Submetida</th>
+                    <th>Entregue</th>
+                    <th>Lida</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {item.messages.map((m: any) => (
+                    <tr key={m.id}>
+                      <td>{stage(m.stage)}</td>
+                      <td>{m.templateName}</td>
+                      <td>
+                        <StatusBadge value={m.status} />
+                      </td>
+                      <td>{date(m.submittedAt ?? m.createdAt)}</td>
+                      <td>{date(m.deliveredAt)}</td>
+                      <td>{date(m.readAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+        <aside style={{ display: 'grid', gap: 18 }}>
+          <article className="panel">
+            <header className="panel-header">
+              <h2>Processo</h2>
+            </header>
+            <div className="panel-body">
+              <Detail label="Campanha" value={item.campaign.name} />
+              <Detail label="Etapa atual" value={stage(item.stage)} />
+              <Detail
+                label="Próxima ação"
+                value={item.nextActionAt ? date(item.nextActionAt) : 'Nenhuma ação programada'}
+              />
+              {['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE'].includes(item.status) ? (
+                <p className="success">
+                  <Icon name="check" />
+                  Fluxo finalizado
+                </p>
+              ) : null}
+            </div>
+          </article>
+          <article className="panel">
+            <header className="panel-header">
+              <h2>Histórico</h2>
+            </header>
+            <div className="panel-body">
+              <ol className="timeline">
+                {events.map((event: any) => (
+                  <li className="timeline-item" key={event.id}>
+                    <span className="timeline-dot" />
+                    <span className="timeline-copy">
+                      <strong>{event.title}</strong>
+                      <small>{date(event.date)}</small>
+                    </span>
+                  </li>
+                ))}
+                {!events.length ? <p className="muted">Nenhum evento registrado.</p> : null}
+              </ol>
+            </div>
+          </article>
+        </aside>
+      </section>
+    </AppShell>
+  );
+}
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="row">
+      <small className="stat-label">{label}</small>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+function date(value?: string | null) {
+  return value ? formatDateTime(value) : '—';
+}
+function stage(value: string) {
+  return (
+    (
+      {
+        FIRST: '1ª convocação',
+        SECOND: '2ª convocação',
+        THIRD: '3ª convocação',
+        FINISHED: 'Finalizada',
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+function messageStatus(value: string) {
+  return (
+    (
+      {
+        QUEUED: 'Na fila',
+        PROCESSING: 'Processando',
+        SUBMITTED: 'Submetida',
+        SENT: 'Enviada',
+        DELIVERED: 'Entregue',
+        READ: 'Lida',
+        FAILED: 'Falhou',
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}

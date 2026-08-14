@@ -57,7 +57,11 @@ Defina exclusivamente no `confirma-web`:
 
 ```text
 NEXT_PUBLIC_API_URL=https://api.seu-dominio.com/api
+NEXT_PUBLIC_APP_TIMEZONE=America/Cuiaba
 ```
+
+Como variáveis `NEXT_PUBLIC_*` são incorporadas durante a compilação do Next.js,
+configure esses mesmos valores também como argumentos de build do serviço web no EasyPanel.
 
 Defina exclusivamente no `confirma-api`:
 

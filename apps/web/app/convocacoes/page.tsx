@@ -4,13 +4,172 @@ import { useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../components/navigation';
 import { EmptyState, Icon, StatusBadge } from '../components/ui';
 import { authFetch } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-type Item = { id: string; stage: string; status: string; nextActionAt: string | null; patient: { displayName: string; phones: Array<{ normalizedValue: string }> }; campaign: { name: string }; records: Array<{ sourceRecord: { procedures: Array<{ name: string }> } }>; messages: Array<{ status: string; createdAt: string }> };
+type Item = {
+  id: string;
+  stage: string;
+  status: string;
+  nextActionAt: string | null;
+  patient: { displayName: string; phones: Array<{ normalizedValue: string }> };
+  campaign: { name: string };
+  records: Array<{ sourceRecord: { procedures: Array<{ name: string }> } }>;
+  messages: Array<{ status: string; createdAt: string }>;
+};
 export default function ConvocationsPage() {
-  const [items,setItems]=useState<Item[]>([]); const [error,setError]=useState(''); const [query,setQuery]=useState(''); const [status,setStatus]=useState('');
-  useEffect(()=>{authFetch(`${API}/convocations`).then(async r=>r.ok?setItems((await r.json()).items):setError('Não foi possível carregar as convocações.')).catch(()=>setError('Não foi possível carregar as convocações.'));},[]);
-  const visible=useMemo(()=>items.filter(item=>(!query||`${item.patient.displayName} ${item.campaign.name}`.toLowerCase().includes(query.toLowerCase()))&&(!status||item.status===status)),[items,query,status]);
-  return <AppShell title="Convocações" eyebrow="Pacientes"><p className="content-lead">Consulte a situação atual, a etapa e a próxima ação de cada paciente.</p>{error?<p className="error"><Icon name="alert"/>{error}</p>:null}<section className="panel"><div className="table-toolbar"><div className="input-with-icon" style={{width:320}}><Icon name="search"/><input className="input" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar paciente ou campanha"/></div><div className="table-tools"><select className="input" style={{width:190}} value={status} onChange={e=>setStatus(e.target.value)}><option value="">Todos os status</option><option value="WAITING_RESPONSE">Aguardando resposta</option><option value="CONFIRMED">Confirmados</option><option value="CANCELLED">Cancelados</option><option value="SEND_ERROR">Falhas</option><option value="FINISHED_NO_RESPONSE">Sem resposta</option></select><button className="button secondary"><Icon name="filter"/>Mais filtros</button></div></div>{visible.length?<div className="table-wrap"><table><thead><tr><th>Paciente</th><th>Campanha</th><th>Etapa</th><th>Situação</th><th>Próxima ação</th><th>Última mensagem</th><th></th></tr></thead><tbody>{visible.map(item=><tr key={item.id}><td><div className="cell-main"><Link className="table-link" href={`/convocacoes/${item.id}`}>{item.patient.displayName}</Link><small>{formatPhone(item.patient.phones[0]?.normalizedValue)}</small></div></td><td>{item.campaign.name}</td><td><span className="badge">{stage(item.stage)}</span></td><td><StatusBadge value={item.status}/></td><td>{item.nextActionAt?new Date(item.nextActionAt).toLocaleString('pt-BR'):'—'}</td><td>{item.messages[0]?<div className="cell-main"><span>{item.messages[0].status}</span><small>{new Date(item.messages[0].createdAt).toLocaleString('pt-BR')}</small></div>:'—'}</td><td><Link className="icon-button" aria-label="Abrir convocação" href={`/convocacoes/${item.id}`}><Icon name="chevron"/></Link></td></tr>)}</tbody></table></div>:<EmptyState title="Nenhuma convocação encontrada" description="Altere os filtros ou crie uma campanha a partir de uma importação aprovada."/>}</section></AppShell>;
+  const [items, setItems] = useState<Item[]>([]);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [status, setStatus] = useState('');
+  useEffect(() => {
+    authFetch(`${API}/convocations`)
+      .then(async (r) =>
+        r.ok
+          ? setItems((await r.json()).items)
+          : setError('Não foi possível carregar as convocações.'),
+      )
+      .catch(() => setError('Não foi possível carregar as convocações.'));
+  }, []);
+  const visible = useMemo(
+    () =>
+      items.filter(
+        (item) =>
+          (!query ||
+            `${item.patient.displayName} ${item.campaign.name}`
+              .toLowerCase()
+              .includes(query.toLowerCase())) &&
+          (!status || item.status === status),
+      ),
+    [items, query, status],
+  );
+  return (
+    <AppShell title="Convocações" eyebrow="Pacientes">
+      <p className="content-lead">
+        Consulte a situação atual, a etapa e a próxima ação de cada paciente.
+      </p>
+      {error ? (
+        <p className="error">
+          <Icon name="alert" />
+          {error}
+        </p>
+      ) : null}
+      <section className="panel">
+        <div className="table-toolbar">
+          <div className="input-with-icon" style={{ width: 320 }}>
+            <Icon name="search" />
+            <input
+              className="input"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar paciente ou campanha"
+            />
+          </div>
+          <div className="table-tools">
+            <select
+              className="input"
+              style={{ width: 190 }}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="">Todos os status</option>
+              <option value="WAITING_RESPONSE">Aguardando resposta</option>
+              <option value="CONFIRMED">Confirmados</option>
+              <option value="CANCELLED">Cancelados</option>
+              <option value="SEND_ERROR">Falhas</option>
+              <option value="FINISHED_NO_RESPONSE">Sem resposta</option>
+            </select>
+            <button className="button secondary">
+              <Icon name="filter" />
+              Mais filtros
+            </button>
+          </div>
+        </div>
+        {visible.length ? (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Paciente</th>
+                  <th>Campanha</th>
+                  <th>Etapa</th>
+                  <th>Situação</th>
+                  <th>Próxima ação</th>
+                  <th>Última mensagem</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((item) => (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="cell-main">
+                        <Link className="table-link" href={`/convocacoes/${item.id}`}>
+                          {item.patient.displayName}
+                        </Link>
+                        <small>{formatPhone(item.patient.phones[0]?.normalizedValue)}</small>
+                      </div>
+                    </td>
+                    <td>{item.campaign.name}</td>
+                    <td>
+                      <span className="badge">{stage(item.stage)}</span>
+                    </td>
+                    <td>
+                      <StatusBadge value={item.status} />
+                    </td>
+                    <td>
+                      {item.nextActionAt
+                        ? formatDateTime(item.nextActionAt)
+                        : '—'}
+                    </td>
+                    <td>
+                      {item.messages[0] ? (
+                        <div className="cell-main">
+                          <span>{item.messages[0].status}</span>
+                          <small>
+                            {formatDateTime(item.messages[0].createdAt)}
+                          </small>
+                        </div>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td>
+                      <Link
+                        className="icon-button"
+                        aria-label="Abrir convocação"
+                        href={`/convocacoes/${item.id}`}
+                      >
+                        <Icon name="chevron" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <EmptyState
+            title="Nenhuma convocação encontrada"
+            description="Altere os filtros ou crie uma campanha a partir de uma importação aprovada."
+          />
+        )}
+      </section>
+    </AppShell>
+  );
 }
-function stage(value:string){return ({FIRST:'1ª tentativa',SECOND:'2ª tentativa',THIRD:'3ª tentativa',FINISHED:'Finalizada'} as Record<string,string>)[value]??value;}
-function formatPhone(value?:string){if(!value)return 'Sem telefone';return value.startsWith('55')?`+${value}`:value;}
+function stage(value: string) {
+  return (
+    (
+      {
+        FIRST: '1ª tentativa',
+        SECOND: '2ª tentativa',
+        THIRD: '3ª tentativa',
+        FINISHED: 'Finalizada',
+      } as Record<string, string>
+    )[value] ?? value
+  );
+}
+function formatPhone(value?: string) {
+  if (!value) return 'Sem telefone';
+  return value.startsWith('55') ? `+${value}` : value;
+}
