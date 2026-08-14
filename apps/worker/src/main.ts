@@ -18,6 +18,7 @@ import { AUTOMATIC_REPLY_TEMPLATE_ID, automaticReplyEnabled } from './automatic-
 import { processWebhook } from './webhook-worker.js';
 import { processHandoff } from './handoff-worker.js';
 import { parseSisregPdf } from './sisreg-parser.js';
+import { applySisregAiFallback } from './sisreg-ai-fallback.js';
 
 const timezone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
 process.env.TZ = timezone;
@@ -30,7 +31,18 @@ const worker = new Worker<ParseImportJob>(
     if (job.name !== 'parse-import') return;
     const { importId, importFileId, temporaryPath } = job.data;
     const data = await readFile(temporaryPath);
-    const parsed = await parseSisregPdf(new Uint8Array(data));
+    let parsed = await parseSisregPdf(new Uint8Array(data));
+    try {
+      parsed = await applySisregAiFallback(parsed);
+    } catch (error) {
+      parsed = {
+        ...parsed,
+        warnings: [
+          ...parsed.warnings,
+          `Fallback de IA não aplicado: ${error instanceof Error ? error.message : 'erro desconhecido'}`,
+        ],
+      };
+    }
 
     await prisma.$transaction(async (transaction) => {
       await transaction.importRow.deleteMany({ where: { importFileId } });
@@ -42,6 +54,9 @@ const worker = new Worker<ParseImportJob>(
             rowNumber: row.rowNumber,
             rawData: { text: row.rawText },
             normalizedData: {
+              extractionSource: row.issues.includes('AI_FALLBACK_REVIEW')
+                ? 'AI_FALLBACK'
+                : 'PARSER',
               codigoConvocacaoOrigem: row.codigoConvocacaoOrigem,
               nome: row.nome,
               dataNascimento: row.dataNascimento,
@@ -337,12 +352,18 @@ async function cleanupTemporaryFiles(): Promise<void> {
 
 function reportSchedulerError(error: unknown): void {
   if (shuttingDown && isClosedConnectionError(error)) return;
-  console.error('Erro no scheduler:', error instanceof Error ? error.message : 'falha não identificada');
+  console.error(
+    'Erro no scheduler:',
+    error instanceof Error ? error.message : 'falha não identificada',
+  );
 }
 
 function reportCleanupError(error: unknown): void {
   if (shuttingDown && isClosedConnectionError(error)) return;
-  console.error('Erro na limpeza temporária:', error instanceof Error ? error.message : 'falha não identificada');
+  console.error(
+    'Erro na limpeza temporária:',
+    error instanceof Error ? error.message : 'falha não identificada',
+  );
 }
 
 function isClosedConnectionError(error: unknown): boolean {
