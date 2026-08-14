@@ -454,6 +454,57 @@ h3 {
 .section-gap {
   margin-top: 18px;
 }
+.report-period-panel {
+  margin-bottom: 20px;
+}
+.report-period-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 230px) auto minmax(180px, 230px) 1fr;
+  align-items: end;
+  gap: 12px;
+  padding: 18px 20px 12px;
+}
+.report-period-body .field {
+  margin: 0;
+}
+.date-range-separator {
+  align-self: end;
+  padding-bottom: 13px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+.report-period-shortcuts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-bottom: 5px;
+}
+.report-period-help {
+  margin: 0;
+  padding: 0 20px 17px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.report-card-period {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  margin: 0 0 16px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  color: var(--teal-dark);
+  background: var(--pale-teal);
+  font-size: 10px;
+  font-weight: 700;
+}
+.report-card-period svg {
+  width: 14px;
+  height: 14px;
+}
 .stat-card {
   min-height: 126px;
   display: flex;
@@ -1250,6 +1301,14 @@ tbody tr:hover {
     overflow-x: auto;
     grid-template-columns: repeat(5, minmax(145px, 1fr));
   }
+  .report-period-body {
+    grid-template-columns: minmax(160px, 1fr) auto minmax(160px, 1fr);
+  }
+  .report-period-shortcuts {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    padding: 4px 0 0;
+  }
 }
 @media (max-width: 680px) {
   :root {
@@ -1298,6 +1357,16 @@ tbody tr:hover {
   .grid,
   .schedule-fields {
     grid-template-columns: 1fr;
+  }
+  .report-period-body {
+    grid-template-columns: 1fr;
+  }
+  .date-range-separator {
+    display: none;
+  }
+  .report-period-shortcuts {
+    grid-column: auto;
+    flex-wrap: wrap;
   }
   .convocation-summary,
   .patient-details {
