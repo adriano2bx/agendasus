@@ -8,7 +8,12 @@ export API_PORT="${API_PORT:-3001}"
 mkdir -p "${UPLOAD_TEMP_DIR:-/tmp/confirma-sus}"
 
 echo "Aplicando migrações do banco de dados..."
-./node_modules/.bin/prisma migrate deploy --schema packages/database/prisma/schema.prisma
+prisma_bin="./packages/database/node_modules/.bin/prisma"
+if [ ! -x "$prisma_bin" ]; then
+  echo "Erro: executável do Prisma não foi encontrado em $prisma_bin" >&2
+  exit 1
+fi
+"$prisma_bin" migrate deploy --schema packages/database/prisma/schema.prisma
 
 shutdown() {
   trap - TERM INT
