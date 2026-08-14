@@ -999,7 +999,9 @@ function Summary({ label, value }: { label: string; value: number }) {
   );
 }
 function layoutLabel(value: string | null) {
-  return value === 'SISREG_V1'
+  return value === 'REGULAMT_XLSX'
+    ? 'Planilha REGULAMT identificada'
+    : value === 'SISREG_V1'
     ? 'Relatório SISREG identificado'
     : value
       ? 'Formato de relatório identificado'

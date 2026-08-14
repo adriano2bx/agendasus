@@ -18,6 +18,7 @@ import { AUTOMATIC_REPLY_TEMPLATE_ID, automaticReplyEnabled } from './automatic-
 import { processWebhook } from './webhook-worker.js';
 import { processHandoff } from './handoff-worker.js';
 import { parseSisregPdf } from './sisreg-parser.js';
+import { parseRegulamtXlsx } from './regulamt-parser.js';
 import { applySisregAiFallback } from './sisreg-ai-fallback.js';
 
 const timezone = process.env.APP_TIMEZONE ?? 'America/Sao_Paulo';
@@ -39,9 +40,14 @@ const worker = new Worker<ParseImportJob>(
       return;
     }
     const data = await readFile(temporaryPath);
-    let parsed = await parseSisregPdf(new Uint8Array(data));
+    const sourceFile = await prisma.importFile.findUnique({ where: { id: importFileId }, select: { mimeType: true } });
+    let parsed = sourceFile?.mimeType.includes('spreadsheet') || sourceFile?.mimeType === 'application/zip'
+      ? await parseRegulamtXlsx(new Uint8Array(data))
+      : await parseSisregPdf(new Uint8Array(data));
     try {
-      parsed = await applySisregAiFallback(parsed);
+      // The spreadsheet is structured already; its missing demographic fields
+      // are genuinely absent, so do not spend an AI fallback call on them.
+      if (parsed.layout !== 'REGULAMT_XLSX') parsed = await applySisregAiFallback(parsed);
     } catch (error) {
       parsed = {
         ...parsed,
@@ -98,7 +104,7 @@ const worker = new Worker<ParseImportJob>(
             invalid: 0,
           },
           status:
-            parsed.layout === 'SISREG_V1' && parsed.rows.length > 0
+            (parsed.layout === 'SISREG_V1' || parsed.layout === 'REGULAMT_XLSX') && parsed.rows.length > 0
               ? 'READY_FOR_REVIEW'
               : 'REVIEW_REQUIRED',
         },

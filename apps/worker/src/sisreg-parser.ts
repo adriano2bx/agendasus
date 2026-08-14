@@ -22,7 +22,7 @@ export interface ParsedSisregRow {
 }
 
 export interface SisregParseResult {
-  layout: 'SISREG_V1' | 'SISREG_V2' | 'UNKNOWN';
+  layout: 'SISREG_V1' | 'SISREG_V2' | 'REGULAMT_XLSX' | 'UNKNOWN';
   pageCount: number;
   reportedPageCount: number | null;
   totalReported: number | null;
