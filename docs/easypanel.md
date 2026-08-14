@@ -50,9 +50,13 @@ UPLOAD_TEMP_DIR=/tmp/confirma-sus
 GUPSHUP_SOURCE=15559618824
 GUPSHUP_APP_NAME=DoctorbotConfirma
 GUPSHUP_API_URL=https://api.gupshup.io/wa/api/v1/template/msg
+GUPSHUP_SESSION_MESSAGE_URL=https://api.gupshup.io/wa/api/v1/msg
 GUPSHUP_TEMPLATE_FIRST_ID=dc67c2dc-3102-445d-ba77-7662243a2e42
 GUPSHUP_TEMPLATE_SECOND_ID=ec210fc3-744a-4d6a-ad00-14304e9858c1
 GUPSHUP_TEMPLATE_THIRD_ID=0598c34a-dca7-4ae9-b1a6-10defc9bcd89
+AUTOMATIC_REPLY_ENABLED=true
+AUTOMATIC_REPLY_CONFIRM_TEXT=Recebemos sua confirmação. Aguarde, em breve nossa equipe dará continuidade ao atendimento.
+AUTOMATIC_REPLY_CANCEL_TEXT=Seu cancelamento foi registrado. Não enviaremos novas convocações referentes a esta solicitação.
 ```
 
 Defina exclusivamente no `confirma-worker`:

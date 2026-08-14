@@ -19,6 +19,13 @@ export interface SendMessageJob {
   stage: 'FIRST' | 'SECOND' | 'THIRD';
 }
 
+export interface SendAutomaticReplyJob {
+  messageId: string;
+  action: 'CONFIRM' | 'CANCEL';
+}
+
+export type MessagingJob = SendMessageJob | SendAutomaticReplyJob;
+
 export interface ProcessWebhookJob {
   messageEventId: string;
 }

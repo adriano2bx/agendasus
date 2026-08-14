@@ -6,11 +6,15 @@ import {
   createRedisConnection,
   type ParseImportJob,
   type SendMessageJob,
+  type MessagingJob,
+  type SendAutomaticReplyJob,
   type ProcessHandoffJob,
   type ProcessWebhookJob,
 } from '@confirma/queue';
-import { Queue, Worker } from 'bullmq';
+import { Queue, Worker, type Job } from 'bullmq';
 import { processSendMessage } from './message-worker.js';
+import { processAutomaticReply } from './automatic-reply-worker.js';
+import { AUTOMATIC_REPLY_TEMPLATE_ID, automaticReplyEnabled } from './automatic-reply.js';
 import { processWebhook } from './webhook-worker.js';
 import { processHandoff } from './handoff-worker.js';
 import { parseSisregPdf } from './sisreg-parser.js';
@@ -87,18 +91,27 @@ const worker = new Worker<ParseImportJob>(
 
 const messageQueueConnection = createRedisConnection();
 const messageWorkerConnection = createRedisConnection();
-const messageQueue = new Queue<SendMessageJob>(QUEUES.messages, {
+const messageQueue = new Queue<MessagingJob>(QUEUES.messages, {
   connection: messageQueueConnection,
 });
 
-const messageWorker = new Worker<SendMessageJob>(QUEUES.messages, processSendMessage, {
-  connection: messageWorkerConnection,
-  concurrency: Number(process.env.MESSAGE_WORKER_CONCURRENCY ?? 5),
-  limiter: {
-    max: Number(process.env.MESSAGE_RATE_LIMIT_MAX ?? 20),
-    duration: Number(process.env.MESSAGE_RATE_LIMIT_DURATION_MS ?? 1_000),
+const messageWorker = new Worker<MessagingJob>(
+  QUEUES.messages,
+  async (job) => {
+    if (job.name === 'send-automatic-reply') {
+      return processAutomaticReply(job as Job<SendAutomaticReplyJob>);
+    }
+    return processSendMessage(job as Job<SendMessageJob>);
   },
-});
+  {
+    connection: messageWorkerConnection,
+    concurrency: Number(process.env.MESSAGE_WORKER_CONCURRENCY ?? 5),
+    limiter: {
+      max: Number(process.env.MESSAGE_RATE_LIMIT_MAX ?? 20),
+      duration: Number(process.env.MESSAGE_RATE_LIMIT_DURATION_MS ?? 1_000),
+    },
+  },
+);
 const webhookConnection = createRedisConnection();
 const webhookWorker = new Worker<ProcessWebhookJob>(QUEUES.webhooks, processWebhook, {
   connection: webhookConnection,
@@ -119,6 +132,7 @@ async function enqueueDueConvocations(): Promise<void> {
   await finalizeNoResponseDue(now);
   await promoteDueFollowUps(now);
   await enqueuePendingHandoffs(now);
+  await enqueuePendingAutomaticReplies();
   const due = await prisma.convocation.findMany({
     where: {
       status: 'SCHEDULED',
@@ -145,6 +159,29 @@ async function enqueueDueConvocations(): Promise<void> {
       where: { id: convocation.id, status: 'SCHEDULED' },
       data: { status: 'QUEUED' },
     });
+  }
+}
+
+async function enqueuePendingAutomaticReplies(): Promise<void> {
+  if (!automaticReplyEnabled()) return;
+  const pending = await prisma.message.findMany({
+    where: { stage: 'FINISHED', templateId: AUTOMATIC_REPLY_TEMPLATE_ID, status: 'QUEUED' },
+    select: { id: true, templateName: true },
+    take: 250,
+  });
+  for (const message of pending) {
+    const action = message.templateName.endsWith('_confirmacao') ? 'CONFIRM' : 'CANCEL';
+    await messageQueue.add(
+      'send-automatic-reply',
+      { messageId: message.id, action },
+      {
+        jobId: `automatic-reply:${message.id}`,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5_000 },
+        removeOnComplete: 1_000,
+        removeOnFail: 1_000,
+      },
+    );
   }
 }
 

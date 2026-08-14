@@ -12,6 +12,11 @@ import {
   stringValue,
   type JsonRecord,
 } from './gupshup-webhook.js';
+import {
+  AUTOMATIC_REPLY_TEMPLATE_ID,
+  automaticReplyDefinition,
+  automaticReplyEnabled,
+} from './automatic-reply.js';
 
 const TERMINAL_CONVOCATION_STATUSES = ['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE'];
 
@@ -209,6 +214,23 @@ async function processInboundMessage(
           metadata: { sourceStage: message.stage, messageId: message.id },
         },
       });
+      if (automaticReplyEnabled()) {
+        const definition = automaticReplyDefinition(content.action);
+        await transaction.message.upsert({
+          where: { idempotencyKey: `automatic-reply:${convocation.id}:${content.action}` },
+          update: {},
+          create: {
+            convocationId: convocation.id,
+            stage: 'FINISHED',
+            attemptNumber: definition.attemptNumber,
+            templateName: definition.templateName,
+            templateId: AUTOMATIC_REPLY_TEMPLATE_ID,
+            phone: message.phone,
+            status: 'QUEUED',
+            idempotencyKey: `automatic-reply:${convocation.id}:${content.action}`,
+          },
+        });
+      }
       if (content.action === 'CONFIRM' && process.env.HANDOFF_MODE === 'LIVE') {
         await transaction.handoffEvent.upsert({
           where: { convocationId: convocation.id },

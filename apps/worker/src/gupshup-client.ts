@@ -22,14 +22,10 @@ export async function sendGupshupTemplate(input: {
   templateId: string;
   patientName: string;
 }): Promise<{ providerMessageId: string }> {
-  const apiKey = required('GUPSHUP_API_KEY');
-  const source = required('GUPSHUP_SOURCE').replace(/\D/g, '');
-  const appName = required('GUPSHUP_APP_NAME');
+  const { apiKey, source, appName } = configuration();
   const endpoint = process.env.GUPSHUP_API_URL ?? 'https://api.gupshup.io/wa/api/v1/template/msg';
   const destination = input.destination.replace(/\D/g, '');
-  if (!/^\d{8,15}$/.test(source) || !/^\d{8,15}$/.test(destination)) {
-    throw new GupshupRequestError('Número de origem ou destino inválido.', 'INVALID_PHONE', false);
-  }
+  validatePhones(source, destination);
 
   const payload = new URLSearchParams({
     channel: 'whatsapp',
@@ -38,6 +34,42 @@ export async function sendGupshupTemplate(input: {
     'src.name': appName,
     template: JSON.stringify({ id: input.templateId, params: [input.patientName] }),
   });
+  return send(endpoint, apiKey, payload);
+}
+
+export async function sendGupshupText(input: {
+  destination: string;
+  text: string;
+}): Promise<{ providerMessageId: string }> {
+  const { apiKey, source, appName } = configuration();
+  const endpoint =
+    process.env.GUPSHUP_SESSION_MESSAGE_URL ?? 'https://api.gupshup.io/wa/api/v1/msg';
+  const destination = input.destination.replace(/\D/g, '');
+  validatePhones(source, destination);
+  const text = input.text.trim();
+  if (!text) {
+    throw new GupshupRequestError(
+      'O texto da resposta automática está vazio.',
+      'INVALID_TEXT',
+      false,
+    );
+  }
+
+  const payload = new URLSearchParams({
+    channel: 'whatsapp',
+    source,
+    destination,
+    'src.name': appName,
+    message: JSON.stringify({ type: 'text', text, previewUrl: false }),
+  });
+  return send(endpoint, apiKey, payload);
+}
+
+async function send(
+  endpoint: string,
+  apiKey: string,
+  payload: URLSearchParams,
+): Promise<{ providerMessageId: string }> {
   let response: Response;
   try {
     response = await fetch(endpoint, {
@@ -59,14 +91,36 @@ export async function sendGupshupTemplate(input: {
     );
   }
   if (!body.messageId) {
-    throw new GupshupRequestError('Resposta do provedor sem identificador da mensagem.', 'MALFORMED_RESPONSE', true);
+    throw new GupshupRequestError(
+      'Resposta do provedor sem identificador da mensagem.',
+      'MALFORMED_RESPONSE',
+      true,
+    );
   }
   return { providerMessageId: body.messageId };
 }
 
-function required(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new GupshupRequestError(`Configuração obrigatória ausente: ${name}.`, 'CONFIGURATION_ERROR', false);
-  return value;
+function configuration() {
+  return {
+    apiKey: required('GUPSHUP_API_KEY'),
+    source: required('GUPSHUP_SOURCE').replace(/\D/g, ''),
+    appName: required('GUPSHUP_APP_NAME'),
+  };
 }
 
+function validatePhones(source: string, destination: string): void {
+  if (!/^\d{8,15}$/.test(source) || !/^\d{8,15}$/.test(destination)) {
+    throw new GupshupRequestError('Número de origem ou destino inválido.', 'INVALID_PHONE', false);
+  }
+}
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value)
+    throw new GupshupRequestError(
+      `Configuração obrigatória ausente: ${name}.`,
+      'CONFIGURATION_ERROR',
+      false,
+    );
+  return value;
+}

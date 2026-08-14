@@ -174,7 +174,7 @@ export class ReportsService {
           message.convocation.campaign.name,
           message.convocation.patient.displayName,
           message.phone || message.convocation.selectedPhone?.normalizedValue || '',
-          stageLabel(message.stage),
+          reportMessageLabel(message),
           messageStatusLabel(message.status),
           formatDateTime(message.submittedAt),
           formatDateTime(message.sentAt),
@@ -309,6 +309,16 @@ function stageLabel(value: string) {
       } as Record<string, string>
     )[value] ?? 'Etapa não identificada'
   );
+}
+
+function reportMessageLabel(message: { stage: string; templateName: string }) {
+  if (message.templateName === 'resposta_automatica_confirmacao') {
+    return 'Resposta automática — confirmação';
+  }
+  if (message.templateName === 'resposta_automatica_cancelamento') {
+    return 'Resposta automática — cancelamento';
+  }
+  return stageLabel(message.stage);
 }
 
 function messageStatusLabel(value: string) {

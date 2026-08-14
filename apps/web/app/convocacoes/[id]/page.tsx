@@ -103,14 +103,14 @@ export default function DetailPage() {
       [
         {
           id: `${m.id}-created`,
-          title: `${stageLabel(m.stage)} · Enfileirada`,
+          title: `${messageLabel(m)} · Enfileirada`,
           date: m.createdAt,
           type: 'message',
         },
         m.submittedAt
           ? {
               id: `${m.id}-submitted`,
-              title: `${stageLabel(m.stage)} · Aceita pelo provedor`,
+              title: `${messageLabel(m)} · Aceita pelo provedor`,
               date: m.submittedAt,
               type: 'message',
             }
@@ -118,7 +118,7 @@ export default function DetailPage() {
         m.sentAt
           ? {
               id: `${m.id}-sent`,
-              title: `${stageLabel(m.stage)} · Enviada`,
+              title: `${messageLabel(m)} · Enviada`,
               date: m.sentAt,
               type: 'message',
             }
@@ -126,7 +126,7 @@ export default function DetailPage() {
         m.deliveredAt
           ? {
               id: `${m.id}-delivered`,
-              title: `${stageLabel(m.stage)} · Entregue`,
+              title: `${messageLabel(m)} · Entregue`,
               date: m.deliveredAt,
               type: 'message',
             }
@@ -134,7 +134,7 @@ export default function DetailPage() {
         m.readAt
           ? {
               id: `${m.id}-read`,
-              title: `${stageLabel(m.stage)} · Lida`,
+              title: `${messageLabel(m)} · Lida`,
               date: m.readAt,
               type: 'message',
             }
@@ -142,7 +142,7 @@ export default function DetailPage() {
         m.failedAt
           ? {
               id: `${m.id}-failed`,
-              title: `${stageLabel(m.stage)} · Falha: ${m.failureReason || 'motivo não informado'}`,
+              title: `${messageLabel(m)} · Falha: ${m.failureReason || 'motivo não informado'}`,
               date: m.failedAt,
               type: 'failure',
             }
@@ -387,10 +387,12 @@ export default function DetailPage() {
             <header className="panel-header">
               <div>
                 <h2>Mensagens enviadas</h2>
-                <span className="muted">Acompanhamento das tentativas pelo WhatsApp</span>
+                <span className="muted">
+                  Convocações e respostas automáticas enviadas pelo WhatsApp
+                </span>
               </div>
               <span className="badge">
-                {item.messages.length} {item.messages.length === 1 ? 'tentativa' : 'tentativas'}
+                {item.messages.length} {item.messages.length === 1 ? 'mensagem' : 'mensagens'}
               </span>
             </header>
             <div className="table-wrap">
@@ -408,8 +410,8 @@ export default function DetailPage() {
                 <tbody>
                   {item.messages.map((m: any) => (
                     <tr key={m.id}>
-                      <td>{stageLabel(m.stage)}</td>
-                      <td>{templateLabel(m.stage)}</td>
+                      <td>{messageLabel(m)}</td>
+                      <td>{messageTemplateLabel(m)}</td>
                       <td>
                         <StatusBadge value={m.status} />
                       </td>
@@ -425,7 +427,7 @@ export default function DetailPage() {
                           .filter((m: any) => m.failureReason)
                           .map((m: any) => (
                             <div key={m.id}>
-                              <strong>{stageLabel(m.stage)}:</strong> {m.failureReason}
+                              <strong>{messageLabel(m)}:</strong> {m.failureReason}
                               {m.failureCode ? ` (código ${m.failureCode})` : ''}
                             </div>
                           ))}
@@ -657,6 +659,21 @@ function SummaryItem({ label, value }: { label: string; value: ReactNode }) {
 }
 function date(value?: string | null) {
   return value ? formatDateTime(value) : '—';
+}
+function messageLabel(message: { stage: string; templateName: string }) {
+  if (message.templateName === 'resposta_automatica_confirmacao') {
+    return 'Resposta automática de confirmação';
+  }
+  if (message.templateName === 'resposta_automatica_cancelamento') {
+    return 'Resposta automática de cancelamento';
+  }
+  return stageLabel(message.stage);
+}
+function messageTemplateLabel(message: { stage: string; templateName: string }) {
+  if (message.templateName.startsWith('resposta_automatica_')) {
+    return 'Mensagem de sessão';
+  }
+  return templateLabel(message.stage);
 }
 function dateOnly(value: string) {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(value));
