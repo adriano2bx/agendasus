@@ -140,6 +140,9 @@ export class CampaignsService {
       if (campaign.status === 'CANCELLED' || campaign.status === 'COMPLETED') {
         throw new ConflictException('Não é possível alterar uma campanha finalizada');
       }
+      if (target === 'SCHEDULED' && ['SCHEDULED', 'RUNNING'].includes(campaign.status)) {
+        return campaign;
+      }
       if (target === 'SCHEDULED' && campaign.status !== 'DRAFT') {
         throw new ConflictException('Somente campanhas em rascunho podem ser programadas');
       }

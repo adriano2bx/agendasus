@@ -116,6 +116,14 @@ export class ImportsService {
       counts: { totalRows: rows.length, validRows, warningRows, invalidRows, identifiedPatients: validPatientKeys.size },
       canApprove: ['READY_FOR_REVIEW', 'REVIEW_REQUIRED'].includes(imported.status) && imported.campaigns.length === 0,
       sourceRecordCount: imported.sourceRecords.length,
+      campaign: imported.campaigns[0]
+        ? {
+            id: imported.campaigns[0].id,
+            name: imported.campaigns[0].name,
+            status: imported.campaigns[0].status,
+            firstActionAt: imported.campaigns[0].firstActionAt,
+          }
+        : null,
       rows,
     };
   }
