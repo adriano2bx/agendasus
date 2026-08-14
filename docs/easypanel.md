@@ -1,5 +1,31 @@
 # Implantação no EasyPanel
 
+## Opção recomendada para homologação: um único serviço
+
+Crie uma aplicação pelo Git usando o `Dockerfile` da raiz e exponha a porta
+`3000`. Esse container executa automaticamente o painel, a API e o worker. A
+API fica disponível no mesmo domínio em `/api`, sem necessidade de expor a
+porta 3001 ou configurar `localhost` no navegador.
+
+No EasyPanel:
+
+```text
+Dockerfile: Dockerfile
+Porta: 3000
+NEXT_PUBLIC_API_URL: /api
+NEXT_PUBLIC_APP_TIMEZONE: America/Sao_Paulo
+```
+
+Não é necessário configurar comando de inicialização. O container aplica as
+migrations, provisiona o login das variáveis `ADMIN_*` e inicia os três
+processos automaticamente.
+
+Configure `DATABASE_URL`, `REDIS_URL` e todas as demais variáveis desta página
+como variáveis de ambiente em tempo de execução. Secrets não devem ser
+configurados apenas como argumentos de build.
+
+## Opção para escala independente: três serviços
+
 Crie serviços separados a partir do mesmo repositório Git:
 
 | Serviço           | Dockerfile                 | Porta |       Réplicas |

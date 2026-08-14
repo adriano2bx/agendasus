@@ -35,7 +35,10 @@ O PDF é temporário: o arquivo só deverá ser removido depois que seus dados f
 persistidos. O PostgreSQL é a fonte de verdade dos agendamentos; Redis/BullMQ serve
 somente para execução assíncrona.
 
-Para implantação no EasyPanel, consulte [o guia de produção](docs/easypanel.md).
+Para implantação no EasyPanel, o `Dockerfile` da raiz executa web, API e worker
+em um único serviço de homologação na porta 3000. Para escalar os componentes
+separadamente, utilize os Dockerfiles em `docker/`. Consulte
+[o guia de produção](docs/easypanel.md).
 
 ## Pendências antes do piloto
 
