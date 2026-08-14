@@ -19,6 +19,7 @@ type Campaign = {
   secondStartTime: string | null;
   thirdIntervalDays: number | null;
   thirdStartTime: string | null;
+  finalResponseWindowDays: number;
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -78,6 +79,7 @@ export default function CampaignDetailPage() {
           secondStartTime: data.get('secondStartTime'),
           thirdIntervalDays: Number(data.get('thirdIntervalDays')),
           thirdStartTime: data.get('thirdStartTime'),
+          finalResponseWindowDays: Number(data.get('finalResponseWindowDays')),
         }),
       });
       if (!response.ok) throw new Error(await errorOf(response));
@@ -397,6 +399,18 @@ function EditForm({
             required
           />
         </div>
+      </div>
+      <div className="field">
+        <label htmlFor="campaign-final-response-days">Prazo após a terceira convocação (dias)</label>
+        <input
+          id="campaign-final-response-days"
+          name="finalResponseWindowDays"
+          type="number"
+          min="1"
+          max="30"
+          defaultValue={item.finalResponseWindowDays ?? 1}
+          required
+        />
       </div>
       <div className="actions">
         <button className="button" disabled={saving}>

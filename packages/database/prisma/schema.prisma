@@ -204,6 +204,7 @@ model Campaign {
   secondStartTime    String?        @map("second_start_time")
   thirdIntervalDays  Int?           @map("third_interval_days")
   thirdStartTime     String?        @map("third_start_time")
+  finalResponseWindowDays Int        @default(1) @map("final_response_window_days")
   startedAt          DateTime?      @map("started_at") @db.Timestamptz(3)
   completedAt        DateTime?      @map("completed_at") @db.Timestamptz(3)
   cancelledAt        DateTime?      @map("cancelled_at") @db.Timestamptz(3)

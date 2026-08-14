@@ -44,6 +44,7 @@ export class CampaignsService {
           secondStartTime: input.secondStartTime,
           thirdIntervalDays: input.thirdIntervalDays,
           thirdStartTime: input.thirdStartTime,
+          finalResponseWindowDays: input.finalResponseWindowDays,
         },
       });
 
@@ -261,6 +262,9 @@ export class CampaignsService {
             ? { thirdIntervalDays: input.thirdIntervalDays }
             : {}),
           ...(input.thirdStartTime ? { thirdStartTime: input.thirdStartTime } : {}),
+          ...(input.finalResponseWindowDays !== undefined
+            ? { finalResponseWindowDays: input.finalResponseWindowDays }
+            : {}),
         },
       });
       if (firstActionAt) {

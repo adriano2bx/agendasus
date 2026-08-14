@@ -33,4 +33,9 @@ export class CreateCampaignDto {
 
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   thirdStartTime!: string;
+
+  @IsInt()
+  @Min(1)
+  @Max(30)
+  finalResponseWindowDays!: number;
 }

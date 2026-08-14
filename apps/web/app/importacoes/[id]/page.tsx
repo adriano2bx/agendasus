@@ -203,6 +203,7 @@ export default function ImportReviewPage() {
           secondStartTime: data.get('secondStartTime'),
           thirdIntervalDays: Number(data.get('thirdIntervalDays')),
           thirdStartTime: data.get('thirdStartTime'),
+          finalResponseWindowDays: Number(data.get('finalResponseWindowDays')),
         }),
       });
       setCampaignId(campaign.id);
@@ -773,6 +774,14 @@ function CampaignForm({
               <TimeField id="thirdStartTime" label="Horário de início" />
             </div>
           </ScheduleItem>
+          <ScheduleItem n={4} title="Prazo final de resposta">
+            <NumberField
+              id="finalResponseWindowDays"
+              label="Dias para responder após a terceira"
+              value={1}
+              min={1}
+            />
+          </ScheduleItem>
         </div>
       </article>
       <aside className="panel sticky-card">
@@ -887,11 +896,11 @@ function ScheduleItem({
     </div>
   );
 }
-function NumberField({ id, label, value }: { id: string; label: string; value: number }) {
+function NumberField({ id, label, value, min = 0 }: { id: string; label: string; value: number; min?: number }) {
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <input id={id} name={id} type="number" min="0" max="30" defaultValue={value} required />
+      <input id={id} name={id} type="number" min={min} max="30" defaultValue={value} required />
     </div>
   );
 }

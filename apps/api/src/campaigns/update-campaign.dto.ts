@@ -17,4 +17,5 @@ export class UpdateCampaignDto {
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) secondStartTime?: string;
   @IsOptional() @IsInt() @Min(0) @Max(30) thirdIntervalDays?: number;
   @IsOptional() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) thirdStartTime?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(30) finalResponseWindowDays?: number;
 }

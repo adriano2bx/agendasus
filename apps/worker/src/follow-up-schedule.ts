@@ -5,6 +5,7 @@ export function nextResponseDeadline(sentAt: Date, stage: ConvocationStage, camp
   secondStartTime: string | null;
   thirdIntervalDays: number | null;
   thirdStartTime: string | null;
+  finalResponseWindowDays?: number | null;
 }): { stage: ConvocationStage; at: Date } | null {
   if (stage === 'FIRST') {
     return { stage: 'SECOND', at: atConfiguredTime(sentAt, campaign.secondIntervalDays ?? 2, campaign.secondStartTime ?? '09:00') };
@@ -13,7 +14,9 @@ export function nextResponseDeadline(sentAt: Date, stage: ConvocationStage, camp
     return { stage: 'THIRD', at: atConfiguredTime(sentAt, campaign.thirdIntervalDays ?? 3, campaign.thirdStartTime ?? '09:00') };
   }
   if (stage === 'THIRD') {
-    const days = Number(process.env.FINAL_RESPONSE_WINDOW_DAYS ?? 1);
+    const days = Number(
+      campaign.finalResponseWindowDays ?? process.env.FINAL_RESPONSE_WINDOW_DAYS ?? 1,
+    );
     return { stage: 'FINISHED', at: new Date(sentAt.valueOf() + Math.max(1, days) * 86_400_000) };
   }
   return null;
