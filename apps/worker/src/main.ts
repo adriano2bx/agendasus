@@ -130,6 +130,7 @@ const handoffWorker = new Worker<ProcessHandoffJob>(QUEUES.handoffs, processHand
 
 async function enqueueDueConvocations(): Promise<void> {
   const now = new Date();
+  await reconcileWaitingStages();
   await finalizeNoResponseDue(now);
   await promoteDueFollowUps(now);
   await enqueuePendingHandoffs(now);
@@ -160,6 +161,35 @@ async function enqueueDueConvocations(): Promise<void> {
       where: { id: convocation.id, status: 'SCHEDULED' },
       data: { status: 'QUEUED' },
     });
+  }
+}
+
+/** Repairs records created by older workers that advanced the visible stage
+ * before the response window had expired. The last main message is the source
+ * of truth while a convocation is waiting for a response. */
+async function reconcileWaitingStages(): Promise<void> {
+  const waiting = await prisma.convocation.findMany({
+    where: { status: 'WAITING_RESPONSE', stage: { in: ['SECOND', 'THIRD'] } },
+    select: {
+      id: true,
+      stage: true,
+      messages: {
+        where: { attemptNumber: { lte: 3 } },
+        orderBy: { attemptNumber: 'desc' },
+        take: 1,
+        select: { stage: true },
+      },
+    },
+    take: 500,
+  });
+  for (const item of waiting) {
+    const latest = item.messages[0]?.stage;
+    if ((latest === 'FIRST' || latest === 'SECOND') && latest !== item.stage) {
+      await prisma.convocation.updateMany({
+        where: { id: item.id, status: 'WAITING_RESPONSE' },
+        data: { stage: latest },
+      });
+    }
   }
 }
 
