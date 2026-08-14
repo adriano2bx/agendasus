@@ -728,6 +728,71 @@ h3 {
 .user-active-control {
   margin: 4px 0 8px;
 }
+.audit-filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(190px, 0.8fr) minmax(190px, 0.8fr) 150px 150px;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+.audit-date-field {
+  position: relative;
+}
+.audit-date-field span {
+  position: absolute;
+  z-index: 1;
+  top: -7px;
+  left: 9px;
+  padding: 0 4px;
+  color: var(--muted);
+  background: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.audit-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.audit-detail-value {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+.audit-detail-value.wide,
+.audit-json-block {
+  grid-column: 1 / -1;
+}
+.audit-detail-value small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.audit-json-block h3 {
+  margin: 4px 0 8px;
+  font-size: 13px;
+}
+.audit-json-block pre {
+  max-height: 260px;
+  margin: 0;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+  color: #d8e6ed;
+  background: #102641;
+  font:
+    11px/1.55 ui-monospace,
+    SFMono-Regular,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .input-with-icon {
   position: relative;
 }
@@ -1901,6 +1966,12 @@ tbody tr:hover {
 }
 
 @media (max-width: 980px) {
+  .audit-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .audit-search {
+    grid-column: 1 / -1;
+  }
   :root {
     --sidebar-width: 76px;
   }
@@ -2089,6 +2160,15 @@ tbody tr:hover {
   .form-grid,
   .campaign-hero {
     grid-template-columns: 1fr;
+  }
+  .audit-filters,
+  .audit-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .audit-search,
+  .audit-detail-value.wide,
+  .audit-json-block {
+    grid-column: auto;
   }
   .filter-grow,
   .quick-filters,

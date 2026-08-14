@@ -31,9 +31,9 @@ export class ImportsController {
       limits: { fileSize: 20 * 1024 * 1024, files: 1 },
     }),
   )
-  create(@UploadedFile() file?: Express.Multer.File) {
+  create(@Req() request: AuthenticatedRequest, @UploadedFile() file?: Express.Multer.File) {
     if (!file) throw new BadRequestException('Arquivo obrigatório');
-    return this.importsService.create(file);
+    return this.importsService.create(file, request.user!.sub);
   }
 
   @Get()

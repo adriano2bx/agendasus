@@ -9,6 +9,7 @@ import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { ReportsModule } from './reports/reports.module.js';
 import { BillingModule } from './billing/billing.module.js';
 import { UsersModule } from './users/users.module.js';
+import { AuditModule } from './audit/audit.module.js';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module.js';
     ReportsModule,
     BillingModule,
     UsersModule,
+    AuditModule,
   ],
   controllers: [HealthController],
 })

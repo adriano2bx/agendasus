@@ -51,7 +51,8 @@ export function AppShell({
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
-  function logout() {
+  async function logout() {
+    await authFetch(`${API}/auth/logout`, { method: 'POST' }).catch(() => undefined);
     sessionStorage.removeItem('confirma_access_token');
     sessionStorage.removeItem('confirma_user');
     router.replace('/login');
@@ -70,7 +71,10 @@ export function AppShell({
           ...groups,
           {
             label: 'Administração',
-            links: [{ label: 'Usuários', href: '/usuarios', icon: 'user' }],
+            links: [
+              { label: 'Usuários', href: '/usuarios', icon: 'user' },
+              { label: 'Auditoria', href: '/auditoria', icon: 'report' },
+            ],
           },
         ]
       : groups;
@@ -124,7 +128,12 @@ export function AppShell({
             <strong>{user?.name ?? 'Administrador'}</strong>
             <small>{user?.email ?? 'Acesso administrativo'}</small>
           </span>
-          <button className="icon-button inverse" aria-label="Sair" title="Sair" onClick={logout}>
+          <button
+            className="icon-button inverse"
+            aria-label="Sair"
+            title="Sair"
+            onClick={() => void logout()}
+          >
             <Icon name="logout" />
           </button>
         </div>
@@ -162,6 +171,7 @@ function humanize(value: string) {
     convocacoes: 'Convocações',
     relatorios: 'Relatórios',
     usuarios: 'Usuários',
+    auditoria: 'Auditoria',
   };
   return labels[value] ?? value.replace(/-/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
 }

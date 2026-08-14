@@ -17,7 +17,7 @@ import type { ImportsQueryDto } from './imports-query.dto.js';
 export class ImportsService {
   constructor(@Inject(IMPORT_QUEUE) private readonly queue: Queue<ParseImportJob>) {}
 
-  async create(file: Express.Multer.File) {
+  async create(file: Express.Multer.File, userId: string) {
     if (
       file.mimetype !== 'application/pdf' ||
       !file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))
@@ -67,6 +67,20 @@ export class ImportsService {
       await prisma.import.update({
         where: { id: createdImport.id },
         data: { status: 'PROCESSING' },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          userId,
+          eventType: 'IMPORT_UPLOADED',
+          entityType: 'import',
+          entityId: createdImport.id,
+          metadata: {
+            fileName: file.originalname,
+            sizeBytes: file.size,
+            checksum,
+          },
+        },
       });
 
       return { id: createdImport.id, status: 'PROCESSING' as const };

@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Post,
@@ -30,7 +31,10 @@ export class AuthController {
       );
     }
     try {
-      const result = await this.authService.login(input);
+      const result = await this.authService.login(input, {
+        ...(request.ip ? { ip: request.ip } : {}),
+        ...(request.headers['user-agent'] ? { userAgent: request.headers['user-agent'] } : {}),
+      });
       this.attempts.delete(key);
       return result;
     } catch (error) {
@@ -45,5 +49,12 @@ export class AuthController {
   @UseGuards(AuthGuard)
   me(@Req() request: AuthenticatedRequest) {
     return this.authService.me(request.user!.sub);
+  }
+
+  @Post('logout')
+  @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async logout(@Req() request: AuthenticatedRequest) {
+    await this.authService.logout(request.user!.sub);
   }
 }
