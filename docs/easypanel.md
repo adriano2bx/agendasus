@@ -80,6 +80,13 @@ VIEW_EASYSAC_APP_KEY=<secret>
 VIEW_EASYSAC_CHANNEL_ID=<secret>
 VIEW_EASYSAC_QUEUE_ID=<secret>
 VIEW_EASYSAC_CHANNEL_TYPE=whatsapp
+# Opcional: fallback compatível com a API de chat da OpenAI para registros
+# SISREG com baixa confiança. Desligado por padrão; configure apenas se houver
+# autorização para enviar esses dados ao endpoint escolhido.
+SISREG_AI_FALLBACK_ENABLED=false
+SISREG_AI_ENDPOINT=https://<endpoint>/v1/chat/completions
+SISREG_AI_API_KEY=<secret>
+SISREG_AI_MODEL=gpt-4o-mini
 ```
 
 Defina exclusivamente no `confirma-web`:
