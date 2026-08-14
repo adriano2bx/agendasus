@@ -362,7 +362,6 @@ function StageCard({ stage, values }: { stage: string; values: Record<string, nu
       <dl>
         <StageValue label="Enviadas" value={values.SENT ?? 0} />
         <StageValue label="Entregues" value={values.DELIVERED ?? 0} />
-        <StageValue label="Lidas" value={values.READ ?? 0} />
         <StageValue label="Falhas" value={values.FAILED ?? 0} danger />
       </dl>
     </article>
