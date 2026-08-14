@@ -210,18 +210,27 @@ async function promoteDueFollowUps(now: Date): Promise<void> {
   await prisma.convocation.updateMany({
     where: {
       status: 'WAITING_RESPONSE',
-      stage: { in: ['SECOND', 'THIRD'] },
+      stage: 'FIRST',
       nextActionAt: { lte: now },
       campaign: { status: { in: ['SCHEDULED', 'RUNNING'] } },
     },
-    data: { status: 'SCHEDULED' },
+    data: { status: 'SCHEDULED', stage: 'SECOND' },
+  });
+  await prisma.convocation.updateMany({
+    where: {
+      status: 'WAITING_RESPONSE',
+      stage: 'SECOND',
+      nextActionAt: { lte: now },
+      campaign: { status: { in: ['SCHEDULED', 'RUNNING'] } },
+    },
+    data: { status: 'SCHEDULED', stage: 'THIRD' },
   });
 }
 
 async function finalizeNoResponseDue(now: Date): Promise<void> {
   const finalizable = await prisma.convocation.findMany({
     where: {
-      stage: 'FINISHED',
+      stage: 'THIRD',
       status: 'WAITING_RESPONSE',
       nextActionAt: { lte: now },
       campaign: { status: { in: ['SCHEDULED', 'RUNNING'] } },
@@ -234,11 +243,16 @@ async function finalizeNoResponseDue(now: Date): Promise<void> {
       const updated = await transaction.convocation.updateMany({
         where: {
           id: convocation.id,
-          stage: 'FINISHED',
+          stage: 'THIRD',
           status: 'WAITING_RESPONSE',
           nextActionAt: { lte: now },
         },
-        data: { status: 'FINISHED_NO_RESPONSE', finishedAt: now, nextActionAt: null },
+        data: {
+          status: 'FINISHED_NO_RESPONSE',
+          stage: 'FINISHED',
+          finishedAt: now,
+          nextActionAt: null,
+        },
       });
       if (updated.count)
         await transaction.auditLog.create({

@@ -149,7 +149,9 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
     await transaction.convocation.updateMany({
       where: { id: created.convocationId, status: 'PROCESSING' },
       data: next
-        ? { status: 'WAITING_RESPONSE', stage: next.stage, nextActionAt: next.at }
+        // Keep the current stage visible while its response window is open.
+        // The scheduler advances the stage only when nextActionAt is due.
+        ? { status: 'WAITING_RESPONSE', nextActionAt: next.at }
         : { status: 'WAITING_RESPONSE', nextActionAt: null },
     });
   });
