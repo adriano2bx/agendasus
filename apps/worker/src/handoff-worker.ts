@@ -148,6 +148,7 @@ function createPayload(event: any, config: ReturnType<typeof requiredConfigurati
 
   return {
     orgId: config.orgId,
+    webhook: config.webhook,
     appKey: config.appKey,
     channelId: config.channelId,
     queueId: config.queueId,
