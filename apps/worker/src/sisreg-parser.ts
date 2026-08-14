@@ -22,7 +22,7 @@ export interface ParsedSisregRow {
 }
 
 export interface SisregParseResult {
-  layout: 'SISREG_V1' | 'UNKNOWN';
+  layout: 'SISREG_V1' | 'SISREG_V2' | 'UNKNOWN';
   pageCount: number;
   reportedPageCount: number | null;
   totalReported: number | null;
@@ -33,6 +33,13 @@ export interface SisregParseResult {
 const PHONE_PATTERN = /(?:\(?\d{2}\)?\s*)?(?:9\s*)?\d{4}[\s-]?\d{4}/g;
 const CPF_PATTERN = /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/;
 const CODE_PATTERN = /\b\d{7,12}\b/;
+
+function detectLayout(fullText: string): SisregParseResult['layout'] {
+  if (/Confirma[cç][aã]o\s+de\s+Agendas|CONSULTA\s+DE\s+AGENDA\s+DE\s+PROFISSIONAL/i.test(fullText))
+    return 'SISREG_V2';
+  if (/SISREG|Sistema Nacional de Regula[cç][aã]o/i.test(fullText)) return 'SISREG_V1';
+  return 'UNKNOWN';
+}
 
 export function rebuildLines(items: readonly PositionedText[]): string[] {
   const groups: PositionedText[][] = [];
@@ -62,9 +69,7 @@ export function rebuildLines(items: readonly PositionedText[]): string[] {
 
 export function parseSisregLines(lines: readonly string[], pageCount: number): SisregParseResult {
   const fullText = lines.join('\n');
-  const layout = /SISREG|Sistema Nacional de Regula[cç][aã]o/i.test(fullText)
-    ? 'SISREG_V1'
-    : 'UNKNOWN';
+  const layout = detectLayout(fullText);
   const pagination = fullText.match(/P[aá]gina\s+\d+\s+de\s+(\d+)/i);
   const reportedTotal = fullText.match(/(?:Total|Quantidade)\D{0,20}(\d{1,7})/i);
   const reportedPageCount = pagination?.[1] ? Number(pagination[1]) : null;
@@ -180,7 +185,13 @@ function extractProcedure(value: string): string | null {
     return 'TOMOGRAFIA POR EMISSÃO DE PÓSITRONS (PET-CT)';
   }
   const match = value.match(/Procedimento\(s\):\s*(.+?)(?=\s+Paciente:|$)/i);
-  return match?.[1]?.trim() ?? null;
+  if (match?.[1]?.trim()) return match[1].trim();
+
+  // Some SISREG exports place the label after the procedure lines when the
+  // PDF text items are read by vertical position. Recover the numbered
+  // procedure block in that ordering as well.
+  const numbered = value.match(/\b(?:0[1-9]|[12]\d)\s*-\s*[\s\S]+/);
+  return numbered?.[0]?.replace(/\s+Procedimento\(s\):\s*$/i, '').trim() ?? null;
 }
 
 function extractPatientName(value: string): string | null {
@@ -257,9 +268,7 @@ export function parseSisregPositionedItems(
 ): SisregParseResult {
   const lines = rebuildLines(items);
   const fullText = lines.join('\n');
-  const layout = /SISREG|Sistema Nacional de Regula[cç][aã]o/i.test(fullText)
-    ? 'SISREG_V1'
-    : 'UNKNOWN';
+  const layout = detectLayout(fullText);
   const codes = items
     .filter((item) => item.x < 85 && /^\d{7,12}$/.test(item.text.trim()))
     .sort((left, right) => left.page - right.page || right.y - left.y);
@@ -269,11 +278,16 @@ export function parseSisregPositionedItems(
     // The first card on a page follows a long report header. A bounded window
     // above its code prevents header labels from being treated as a patient.
     const upper = previous?.page === code.page ? (previous.y + code.y) / 2 : code.y + 60;
-    const lower = next?.page === code.page ? (next.y + code.y) / 2 : Number.NEGATIVE_INFINITY;
+    const lower =
+      next?.page === code.page
+        ? layout === 'SISREG_V2'
+          ? next.y + 20
+          : (next.y + code.y) / 2
+        : Number.NEGATIVE_INFINITY;
     const block = items.filter(
       (item) => item.page === code.page && item.y <= upper && item.y >= lower && item.text.trim(),
     );
-    const row = parsePositionedRecord(code, block, index + 1);
+    const row = parsePositionedRecord(code, block, index + 1, layout);
     if (row.procedimentos.length === 0) {
       const procedureLabel = items
         .filter(
@@ -305,11 +319,12 @@ export function parseSisregPositionedItems(
         .filter((item) => item.x >= 425 && item.x < 500)
         .map((item) => item.text)
         .join(' ');
-      const continuationDate = extractSpacedDates(continuationSchedule)[0];
+      const continuationDate =
+        extractSpacedDates(continuationSchedule)[0] ?? extractSpacedDates(row.rawText)[0];
       const continuationTime = extractSpacedTimes(continuationSchedule)[0];
       const continuationProcedure = extractProcedure(
         continuation
-          .filter((item) => item.x >= 225 && item.x < 490)
+          .filter((item) => item.x >= 80 && item.x < 500)
           .map((item) => item.text)
           .join(' '),
       );
@@ -345,24 +360,46 @@ function parsePositionedRecord(
   code: PositionedText,
   block: readonly PositionedText[],
   rowNumber: number,
+  layout: SisregParseResult['layout'],
 ): ParsedSisregRow {
+  const columns: Record<
+    'name' | 'birth' | 'phone' | 'schedule' | 'procedure',
+    readonly [number, number]
+  > =
+    layout === 'SISREG_V2'
+      ? {
+          name: [150, 225],
+          birth: [225, 295],
+          phone: [500, 560],
+          schedule: [440, 500],
+          procedure: [80, 500],
+        }
+      : {
+          name: [150, 230],
+          birth: [225, 295],
+          phone: [490, 560],
+          schedule: [425, 500],
+          procedure: [225, 490],
+        };
   const at = (min: number, max: number) =>
     block.filter((item) => item.x >= min && item.x < max).sort((left, right) => right.y - left.y);
-  const nameParts = at(150, 230)
+  const nameParts = at(...columns.name)
     .filter((item) => !/Paciente:/i.test(item.text))
     .map((item) => compactName(item.text))
     .filter(Boolean);
   const birth =
-    at(225, 295)
+    at(...columns.birth)
       .map((item) => extractSpacedDates(item.text)[0])
       .find(Boolean) ?? null;
-  const phone = at(490, 560).flatMap((item) => extractPhones(normalizeSisregSpacing(item.text)));
-  const schedule = at(425, 500)
+  const phone = at(...columns.phone).flatMap((item) =>
+    extractPhones(normalizeSisregSpacing(item.text)),
+  );
+  const schedule = at(...columns.schedule)
     .map((item) => item.text)
     .join(' ');
   const scheduleDates = extractSpacedDates(schedule);
   const scheduleTime = extractSpacedTimes(schedule)[0] ?? null;
-  const procedureText = at(225, 490)
+  const procedureText = at(...columns.procedure)
     .map((item) => item.text)
     .join(' ');
   const rawText = [...block]
@@ -370,6 +407,7 @@ function parsePositionedRecord(
     .map((item) => item.text.trim())
     .filter(Boolean)
     .join(' ');
+  const cns = extractCnsColumn(at(75, 150));
   const row: ParsedSisregRow = {
     rowNumber,
     rawText,
@@ -377,7 +415,7 @@ function parsePositionedRecord(
     nome: nameParts.length ? nameParts.join(' ') : null,
     dataNascimento: birth,
     cpf: null,
-    cns: extractCns(normalizeSisregSpacing(rawText)),
+    cns: cns ?? extractCns(rawText),
     telefones: [...new Set(phone)],
     dataHora: scheduleDates[0] && scheduleTime ? `${scheduleDates[0]} ${scheduleTime}` : null,
     procedimentos: extractProcedure(procedureText) ? [extractProcedure(procedureText)!] : [],
@@ -400,6 +438,16 @@ function compactName(value: string): string {
   const fragmented =
     parts.length >= 4 && parts.filter((part) => part.length <= 2).length / parts.length >= 0.7;
   return (fragmented ? parts.join('') : parts.join(' ')).trim();
+}
+
+function extractCnsColumn(items: readonly PositionedText[]): string | null {
+  const text = items
+    .map((item) => item.text.trim())
+    .filter(Boolean)
+    .join(' ');
+  const match = text.match(/\d(?:[\s\d]*\d){14}/);
+  const digits = match?.[0].replace(/\D/g, '');
+  return digits?.length === 15 ? digits : null;
 }
 
 function operatorTextByAlignmentKey(
