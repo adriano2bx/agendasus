@@ -353,11 +353,12 @@ function Attention({
   );
 }
 function StageCard({ stage, values }: { stage: string; values: Record<string, number> }) {
+  const ordinal = stage === 'FIRST' ? 'primeira' : stage === 'SECOND' ? 'segunda' : 'terceira';
   return (
     <article className="stage-card">
       <div className="stage-card-heading">
         <span className="schedule-index">{stage === 'FIRST' ? 1 : stage === 'SECOND' ? 2 : 3}</span>
-        <strong>{stageLabel(stage)}</strong>
+        <strong>{stageLabel(stage)} ({ordinal} convocação)</strong>
       </div>
       <dl>
         <StageValue label="Enviadas" value={values.SENT ?? 0} />
