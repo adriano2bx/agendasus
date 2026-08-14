@@ -22,8 +22,9 @@ export function nextResponseDeadline(sentAt: Date, stage: ConvocationStage, camp
 function atConfiguredTime(from: Date, days: number, time: string): Date {
   const [hour = '09', minute = '00'] = time.split(':');
   const target = new Date(from);
-  target.setDate(target.getDate() + Math.max(1, days));
+  // Zero-day intervals are supported for controlled testing and mean
+  // "later on the same calendar day" at the configured time.
+  target.setDate(target.getDate() + Math.max(0, days));
   target.setHours(Number(hour), Number(minute), 0, 0);
   return target;
 }
-

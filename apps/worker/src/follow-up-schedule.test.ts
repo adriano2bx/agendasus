@@ -21,4 +21,16 @@ describe('follow-ups', () => {
     assert.equal(final?.stage, 'FINISHED');
     assert.equal(final?.at.toISOString(), '2026-08-14T12:00:00.000Z');
   });
+
+  it('permite segunda e terceira tentativa no mesmo dia', () => {
+    const sameDay = {
+      secondIntervalDays: 0,
+      secondStartTime: '14:00',
+      thirdIntervalDays: 0,
+      thirdStartTime: '16:00',
+    };
+    const sentAt = new Date('2026-08-13T10:00:00.000Z');
+    assert.equal(nextResponseDeadline(sentAt, 'FIRST', sameDay)?.at.toISOString(), '2026-08-13T17:00:00.000Z');
+    assert.equal(nextResponseDeadline(sentAt, 'SECOND', sameDay)?.at.toISOString(), '2026-08-13T19:00:00.000Z');
+  });
 });
