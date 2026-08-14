@@ -7,11 +7,10 @@ import { HealthController } from './health/health.controller.js';
 import { ImportsModule } from './imports/imports.module.js';
 import { WebhooksModule } from './webhooks/webhooks.module.js';
 import { ReportsModule } from './reports/reports.module.js';
-import { UsersModule } from './users/users.module.js';
 import { BillingModule } from './billing/billing.module.js';
 
 @Module({
-  imports: [AuthModule, ImportsModule, CampaignsModule, WebhooksModule, DashboardModule, ConvocationsModule, ReportsModule, UsersModule, BillingModule],
+  imports: [AuthModule, ImportsModule, CampaignsModule, WebhooksModule, DashboardModule, ConvocationsModule, ReportsModule, BillingModule],
   controllers: [HealthController],
 })
 export class AppModule {}

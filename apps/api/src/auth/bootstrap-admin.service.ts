@@ -23,11 +23,14 @@ export class BootstrapAdminService implements OnApplicationBootstrap {
 
     const passwordHash = await hash(password, 12);
     const existing = await prisma.user.findUnique({ where: { email } });
-    await prisma.user.upsert({
-      where: { email },
-      create: { name: config.ADMIN_NAME, email, passwordHash, role: 'ADMIN', active: true },
-      update: { name: config.ADMIN_NAME, passwordHash, role: 'ADMIN', active: true },
-    });
+    await prisma.$transaction([
+      prisma.user.updateMany({ where: { email: { not: email }, active: true }, data: { active: false } }),
+      prisma.user.upsert({
+        where: { email },
+        create: { name: config.ADMIN_NAME, email, passwordHash, role: 'ADMIN', active: true },
+        update: { name: config.ADMIN_NAME, passwordHash, role: 'ADMIN', active: true },
+      }),
+    ]);
 
     if (!existing) {
       await prisma.auditLog.create({

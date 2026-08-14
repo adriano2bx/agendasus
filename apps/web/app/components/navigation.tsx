@@ -16,7 +16,6 @@ const groups = [
     ],
   },
   { label: 'Análise', links: [{ label: 'Relatórios', href: '/relatorios', icon: 'report' }] },
-  { label: 'Administração', links: [{ label: 'Usuários', href: '/usuarios', icon: 'user' }] },
 ] as const;
 
 export function AppShell({ children, title, eyebrow, actions }: { children: ReactNode; title: string; eyebrow?: string; actions?: ReactNode }) {
