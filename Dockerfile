@@ -43,9 +43,15 @@ COPY --from=build --chown=confirma:confirma /app/apps/worker/dist ./apps/worker/
 COPY --from=build --chown=confirma:confirma /app/apps/worker/package.json ./apps/worker/package.json
 COPY --from=build --chown=confirma:confirma /app/packages ./packages
 COPY --from=build --chown=confirma:confirma /app/node_modules ./node_modules
+COPY --from=build --chown=confirma:confirma /app/apps/api/node_modules ./apps/api/node_modules
+COPY --from=build --chown=confirma:confirma /app/apps/worker/node_modules ./apps/worker/node_modules
 COPY --from=build --chown=confirma:confirma /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --chown=confirma:confirma docker/start-all.sh ./docker/start-all.sh
-RUN chmod +x ./docker/start-all.sh
+RUN chmod +x ./docker/start-all.sh \
+  && cd /app/apps/api \
+  && node -e "Promise.all([import('reflect-metadata'), import('@confirma/database')])" \
+  && cd /app/apps/worker \
+  && node -e "Promise.all([import('@confirma/database'), import('bullmq')])"
 
 USER confirma
 EXPOSE 3000

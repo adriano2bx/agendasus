@@ -23,6 +23,9 @@ COPY --from=build --chown=confirma:confirma /app/apps/api/dist apps/api/dist
 COPY --from=build --chown=confirma:confirma /app/apps/api/package.json apps/api/package.json
 COPY --from=build --chown=confirma:confirma /app/packages packages
 COPY --from=build --chown=confirma:confirma /app/node_modules node_modules
+COPY --from=build --chown=confirma:confirma /app/apps/api/node_modules apps/api/node_modules
+RUN cd /app/apps/api \
+  && node -e "Promise.all([import('reflect-metadata'), import('@confirma/database')])"
 USER confirma
 EXPOSE 3001
-CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy --schema packages/database/prisma/schema.prisma && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "packages/database/node_modules/.bin/prisma migrate deploy --schema packages/database/prisma/schema.prisma && node apps/api/dist/main.js"]
