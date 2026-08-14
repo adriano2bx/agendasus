@@ -1,8 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { parseSisregLines, parseSisregPositionedItems, rebuildLines } from './sisreg-parser.js';
+import {
+  parseSisregLines,
+  parseSisregPositionedItems,
+  rebuildLines,
+  restoreExplicitSpacing,
+} from './sisreg-parser.js';
 
 describe('parser SISREG', () => {
+  it('recupera os espaços reais sem manter o espaçamento artificial entre letras', () => {
+    const candidates = new Map([['ADELINOLUIZ', ['ADELINO LUIZ']]]);
+    assert.equal(restoreExplicitSpacing('A D E L I N O L U I Z', candidates), 'ADELINO LUIZ');
+  });
+
   it('reconstrói linhas por página, posição vertical e horizontal', () => {
     assert.deepEqual(
       rebuildLines([
@@ -65,5 +75,23 @@ describe('parser SISREG', () => {
 
     assert.equal(result.rows[0]?.nome, 'JACINIRAMARIABOAVENTURA');
     assert.ok(!result.rows[0]?.nome?.includes('ESTATÍSTICAS'));
+  });
+
+  it('preserva nome e sobrenomes quando o PDF já fornece os espaços corretos', () => {
+    const result = parseSisregPositionedItems(
+      [
+        { text: 'SISREG', x: 20, y: 850, page: 1 },
+        { text: '720000001', x: 41, y: 700, page: 1 },
+        { text: 'Paciente:', x: 166, y: 750, page: 1 },
+        { text: 'PACIENTE TESTE CONFIRMA', x: 166, y: 740, page: 1 },
+        { text: '15/05/1980', x: 233, y: 740, page: 1 },
+        { text: '(12) 97412-1245', x: 500, y: 740, page: 1 },
+        { text: '15/09/2026 - 09:00', x: 434, y: 680, page: 1 },
+        { text: 'TOMOGRAFIA POR EMISSÃO DE PÓSITRONS (PET-CT)', x: 243, y: 670, page: 1 },
+      ],
+      1,
+    );
+
+    assert.equal(result.rows[0]?.nome, 'PACIENTE TESTE CONFIRMA');
   });
 });

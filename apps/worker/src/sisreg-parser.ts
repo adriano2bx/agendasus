@@ -1,4 +1,4 @@
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
 export interface PositionedText {
   text: string;
@@ -203,10 +203,12 @@ export async function parseSisregPdf(data: Uint8Array): Promise<SisregParseResul
   for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
     const page = await document.getPage(pageNumber);
     const content = await page.getTextContent();
+    const operatorList = await page.getOperatorList();
+    const operatorText = operatorTextByAlignmentKey(operatorList.fnArray, operatorList.argsArray);
     for (const item of content.items) {
       if (!('str' in item)) continue;
       items.push({
-        text: item.str,
+        text: restoreExplicitSpacing(item.str, operatorText),
         x: item.transform[4] ?? 0,
         y: item.transform[5] ?? 0,
         page: pageNumber,
@@ -310,11 +312,56 @@ function parsePositionedRecord(code: PositionedText, block: readonly PositionedT
 }
 
 function compactName(value: string): string {
-  return value
-    .replace(/\s+/g, '')
-    .replace(/ESTAT[IÍ]STICASDAPESQUISA.*$/i, '')
-    .replace(/(?:VAGASDE|SOLICITA[CÇ][OÕ]ES|TOTALDE).*$/i, '')
+  const withoutFooter = value
+    .replace(/ESTAT[IÍ]STICAS\s*DA\s*PESQUISA.*$/i, '')
+    .replace(/(?:VAGAS\s*DE|SOLICITA[CÇ][OÕ]ES|TOTAL\s*DE).*$/i, '')
     .trim();
+  const parts = withoutFooter.split(/\s+/).filter(Boolean);
+  const fragmented =
+    parts.length >= 4 && parts.filter((part) => part.length <= 2).length / parts.length >= 0.7;
+  return (fragmented ? parts.join('') : parts.join(' ')).trim();
+}
+
+function operatorTextByAlignmentKey(
+  operations: readonly number[],
+  argumentsList: readonly unknown[],
+): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  let current = '';
+  let insideText = false;
+  for (let index = 0; index < operations.length; index += 1) {
+    const operation = operations[index];
+    if (operation === OPS.beginText) {
+      current = '';
+      insideText = true;
+      continue;
+    }
+    if (operation === OPS.showText && insideText) {
+      const args = argumentsList[index] as [Array<number | { unicode?: string }>] | undefined;
+      current += (args?.[0] ?? [])
+        .filter((glyph): glyph is { unicode?: string } => typeof glyph !== 'number')
+        .map((glyph) => glyph.unicode ?? '')
+        .join('');
+      continue;
+    }
+    if (operation === OPS.endText && insideText) {
+      const normalized = current.replace(/\s+/g, ' ').trim();
+      const key = alignmentKey(normalized);
+      if (key) result.set(key, [...(result.get(key) ?? []), normalized]);
+      current = '';
+      insideText = false;
+    }
+  }
+  return result;
+}
+
+export function restoreExplicitSpacing(value: string, candidates: Map<string, string[]>): string {
+  const matches = candidates.get(alignmentKey(value));
+  return matches?.shift() ?? value;
+}
+
+function alignmentKey(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, '').toLocaleUpperCase('pt-BR');
 }
 
 function extractPhones(value: string): string[] {
