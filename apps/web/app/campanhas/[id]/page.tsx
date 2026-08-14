@@ -359,7 +359,7 @@ function EditForm({
             id="campaign-second-days"
             name="secondIntervalDays"
             type="number"
-            min="1"
+            min="0"
             max="30"
             defaultValue={item.secondIntervalDays ?? 2}
             required
@@ -381,7 +381,7 @@ function EditForm({
             id="campaign-third-days"
             name="thirdIntervalDays"
             type="number"
-            min="1"
+            min="0"
             max="30"
             defaultValue={item.thirdIntervalDays ?? 3}
             required

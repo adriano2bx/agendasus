@@ -218,19 +218,19 @@ export default function DashboardPage() {
               </header>
               <div className="panel-body metric-list">
                 <Progress
-                  label="Confirmados (1ª, 2ª ou 3ª convocação)"
+                  label="Confirmados"
                   value={data.outcomes.confirmed}
                   total={finalTotal}
                   color="var(--success)"
                 />
                 <Progress
-                  label="Cancelados (1ª, 2ª ou 3ª convocação)"
+                  label="Cancelados"
                   value={data.outcomes.cancelled}
                   total={finalTotal}
                   color="var(--cancelled)"
                 />
                 <Progress
-                  label="Sem resposta (após a 3ª convocação)"
+                  label="Sem resposta"
                   value={data.outcomes.noResponse}
                   total={finalTotal}
                   color="var(--warning)"

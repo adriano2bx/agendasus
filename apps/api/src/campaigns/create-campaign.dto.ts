@@ -19,7 +19,7 @@ export class CreateCampaignDto {
   firstActionAt!: string;
 
   @IsInt()
-  @Min(1)
+  @Min(0)
   @Max(30)
   secondIntervalDays!: number;
 
@@ -27,7 +27,7 @@ export class CreateCampaignDto {
   secondStartTime!: string;
 
   @IsInt()
-  @Min(1)
+  @Min(0)
   @Max(30)
   thirdIntervalDays!: number;
 
