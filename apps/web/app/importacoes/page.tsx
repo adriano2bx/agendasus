@@ -45,7 +45,7 @@ export default function ImportsPage() {
       await loadImports();
       window.setTimeout(() => location.assign(`/importacoes/${result.id}`), 500);
     } catch (cause) {
-      setMessage(cause instanceof Error ? cause.message : 'Falha no upload');
+      setMessage(cause instanceof Error ? cause.message : 'Falha no envio do arquivo');
     } finally {
       setLoading(false);
     }
@@ -154,9 +154,7 @@ export default function ImportsPage() {
                     <td>{formatDateTime(item.createdAt)}</td>
                     <td>{item.recordsFound}</td>
                     <td>
-                      <StatusBadge
-                        value={item.status === 'READY_FOR_REVIEW' ? 'SCHEDULED' : item.status}
-                      />
+                      <StatusBadge value={item.status} />
                     </td>
                     <td>
                       <Link

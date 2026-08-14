@@ -154,7 +154,7 @@ export default function ImportReviewPage() {
   return (
     <AppShell
       title={approved ? 'Programar campanha' : 'Conferir importação'}
-      eyebrow={review.layout ?? 'Layout em análise'}
+      eyebrow={layoutLabel(review.layout)}
       actions={
         <Link href="/importacoes" className="button secondary">
           Voltar
@@ -438,6 +438,10 @@ function Summary({ label, value }: { label: string; value: number }) {
       <strong style={{ color: 'var(--navy)', fontSize: 22 }}>{value}</strong>
     </div>
   );
+}
+function layoutLabel(value: string | null) {
+  if (value === 'SISREG_V1') return 'Relatório SISREG identificado';
+  return value ? 'Formato de relatório identificado' : 'Formato em análise';
 }
 function CampaignReady({
   review,

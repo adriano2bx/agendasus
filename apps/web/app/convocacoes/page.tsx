@@ -5,6 +5,7 @@ import { AppShell } from '../components/navigation';
 import { EmptyState, Icon, StatusBadge } from '../components/ui';
 import { authFetch } from '../lib/api';
 import { formatDateTime } from '../lib/date-time';
+import { stageLabel } from '../lib/labels';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 type Item = {
   id: string;
@@ -71,10 +72,10 @@ export default function ConvocationsPage() {
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
-              <option value="">Todos os status</option>
+              <option value="">Todas as situações</option>
               <option value="WAITING_RESPONSE">Aguardando resposta</option>
-              <option value="CONFIRMED">Confirmados</option>
-              <option value="CANCELLED">Cancelados</option>
+              <option value="CONFIRMED">Confirmadas</option>
+              <option value="CANCELLED">Canceladas</option>
               <option value="SEND_ERROR">Falhas</option>
               <option value="FINISHED_NO_RESPONSE">Sem resposta</option>
             </select>
@@ -111,23 +112,17 @@ export default function ConvocationsPage() {
                     </td>
                     <td>{item.campaign.name}</td>
                     <td>
-                      <span className="badge">{stage(item.stage)}</span>
+                      <span className="badge">{stageLabel(item.stage)}</span>
                     </td>
                     <td>
                       <StatusBadge value={item.status} />
                     </td>
-                    <td>
-                      {item.nextActionAt
-                        ? formatDateTime(item.nextActionAt)
-                        : '—'}
-                    </td>
+                    <td>{item.nextActionAt ? formatDateTime(item.nextActionAt) : '—'}</td>
                     <td>
                       {item.messages[0] ? (
                         <div className="cell-main">
-                          <span>{item.messages[0].status}</span>
-                          <small>
-                            {formatDateTime(item.messages[0].createdAt)}
-                          </small>
+                          <StatusBadge value={item.messages[0].status} />
+                          <small>{formatDateTime(item.messages[0].createdAt)}</small>
                         </div>
                       ) : (
                         '—'
@@ -155,18 +150,6 @@ export default function ConvocationsPage() {
         )}
       </section>
     </AppShell>
-  );
-}
-function stage(value: string) {
-  return (
-    (
-      {
-        FIRST: '1ª tentativa',
-        SECOND: '2ª tentativa',
-        THIRD: '3ª tentativa',
-        FINISHED: 'Finalizada',
-      } as Record<string, string>
-    )[value] ?? value
   );
 }
 function formatPhone(value?: string) {

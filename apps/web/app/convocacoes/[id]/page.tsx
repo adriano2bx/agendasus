@@ -1,11 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import { AppShell } from '../../components/navigation';
 import { Icon, StatusBadge } from '../../components/ui';
 import { authFetch } from '../../lib/api';
 import { formatDateTime } from '../../lib/date-time';
+import { stageLabel, statusLabel, templateLabel } from '../../lib/labels';
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 export default function DetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +38,7 @@ export default function DetailPage() {
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { message?: string } | null;
-        throw new Error(body?.message ?? 'Não foi possível alterar o status.');
+        throw new Error(body?.message ?? 'Não foi possível alterar a situação.');
       }
       await load();
       setMessage(
@@ -47,7 +49,7 @@ export default function DetailPage() {
       setManualStatus(null);
       setReason('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Não foi possível alterar o status.');
+      setError(cause instanceof Error ? cause.message : 'Não foi possível alterar a situação.');
     } finally {
       setSaving(false);
     }
@@ -61,13 +63,13 @@ export default function DetailPage() {
   const events = [
     ...item.messages.map((m: any) => ({
       id: m.id,
-      title: `${stage(m.stage)} · ${messageStatus(m.status)}`,
+      title: `${stageLabel(m.stage)} · ${statusLabel(m.status)}`,
       date: m.createdAt,
       type: 'message',
     })),
     ...item.responses.map((r: any) => ({
       id: r.id,
-      title: `Resposta: ${r.action === 'CONFIRM' ? 'Confirmou' : 'Cancelou'}`,
+      title: `Resposta: ${responseLabel(r.action)}`,
       date: r.receivedAt,
       type: 'response',
     })),
@@ -105,7 +107,7 @@ export default function DetailPage() {
                   </span>
                   <span>
                     <strong>Marcar como confirmado</strong>
-                    <small>Finaliza o fluxo e bloqueia follow-ups</small>
+                    <small>Finaliza o fluxo e bloqueia as próximas convocações</small>
                   </span>
                 </button>
                 <button
@@ -142,60 +144,71 @@ export default function DetailPage() {
           {error}
         </p>
       ) : null}
-      <div className="actions" style={{ marginBottom: 18 }}>
-        <StatusBadge value={item.status} />
-        <span className="badge">{stage(item.stage)}</span>
-        <span className="muted">Campanha: {item.campaign.name}</span>
-      </div>
-      <section className="grid-main">
-        <div style={{ display: 'grid', gap: 18 }}>
-          <section className="grid two">
-            <article className="panel">
-              <header className="panel-header">
-                <h2>Dados do paciente</h2>
-              </header>
-              <div className="panel-body">
-                <Detail label="Nome completo" value={item.patient.displayName} />
-                <Detail
-                  label="Data de nascimento"
-                  value={item.patient.birthDate ? dateOnly(item.patient.birthDate) : '—'}
-                />
-                <Detail label="CPF" value={formatCpf(item.patient.cpf)} />
-                <Detail
-                  label="Solicitações agrupadas"
-                  value={`${item.records.length} ${item.records.length === 1 ? 'registro' : 'registros'}`}
-                />
+      <section className="convocation-summary" aria-label="Resumo da convocação">
+        <SummaryItem label="Situação" value={<StatusBadge value={item.status} />} />
+        <SummaryItem label="Etapa atual" value={stageLabel(item.stage)} />
+        <SummaryItem label="Campanha" value={item.campaign.name} />
+        <SummaryItem
+          label="Próxima ação"
+          value={item.nextActionAt ? date(item.nextActionAt) : 'Nenhuma ação programada'}
+        />
+      </section>
+
+      <section className="convocation-layout">
+        <div className="convocation-main">
+          <article className="panel patient-panel">
+            <header className="panel-header">
+              <div>
+                <h2>Informações do paciente</h2>
+                <span className="muted">Dados pessoais e contato utilizado nesta convocação</span>
               </div>
-            </article>
-            <article className="panel">
-              <header className="panel-header">
-                <h2>Telefones</h2>
-              </header>
-              <div className="panel-body">
-                {item.patient.phones.map((phone: any, index: number) => (
-                  <Detail
-                    key={phone.id ?? phone.normalizedValue}
-                    label={
-                      phone.selectedForWhatsApp
-                        ? 'WhatsApp selecionado'
-                        : `Alternativo ${index + 1}`
-                    }
-                    value={`${formatPhone(phone.normalizedValue)}${phone.valid ? '' : ' · inválido'}`}
-                  />
-                ))}
-                {!item.patient.phones.length ? (
-                  <p className="muted">Nenhum telefone cadastrado.</p>
-                ) : null}
+            </header>
+            <div className="patient-details">
+              <Detail
+                label="Data de nascimento"
+                value={item.patient.birthDate ? dateOnly(item.patient.birthDate) : 'Não informada'}
+              />
+              <Detail label="CPF" value={formatCpf(item.patient.cpf)} />
+              <Detail
+                label="Solicitações agrupadas"
+                value={`${item.records.length} ${item.records.length === 1 ? 'registro' : 'registros'}`}
+              />
+              <div className="contact-details">
+                <small className="stat-label">Telefones</small>
+                <div className="phone-list">
+                  {item.patient.phones.map((phone: any, index: number) => (
+                    <div className="phone-item" key={phone.id ?? phone.normalizedValue}>
+                      <span className="phone-icon">
+                        <Icon name="message" />
+                      </span>
+                      <span>
+                        <strong>{formatPhone(phone.normalizedValue)}</strong>
+                        <small>
+                          {phone.selectedForWhatsApp
+                            ? 'Número selecionado para WhatsApp'
+                            : `Telefone alternativo ${index + 1}`}
+                          {!phone.valid ? ' · número inválido' : ''}
+                        </small>
+                      </span>
+                    </div>
+                  ))}
+                  {!item.patient.phones.length ? (
+                    <p className="muted">Nenhum telefone cadastrado.</p>
+                  ) : null}
+                </div>
               </div>
-            </article>
-          </section>
+            </div>
+          </article>
+
           <article className="panel">
             <header className="panel-header">
               <div>
                 <h2>Solicitações e procedimentos</h2>
                 <span className="muted">Registros agrupados nesta convocação</span>
               </div>
-              <span className="badge">{item.records.length} registros</span>
+              <span className="badge">
+                {item.records.length} {item.records.length === 1 ? 'registro' : 'registros'}
+              </span>
             </header>
             <div className="panel-body record-list">
               {item.records.map((relation: any) => {
@@ -235,17 +248,22 @@ export default function DetailPage() {
           </article>
           <article className="panel">
             <header className="panel-header">
-              <h2>Mensagens e respostas</h2>
-              <span className="badge">{item.messages.length} tentativas</span>
+              <div>
+                <h2>Mensagens enviadas</h2>
+                <span className="muted">Acompanhamento das tentativas pelo WhatsApp</span>
+              </div>
+              <span className="badge">
+                {item.messages.length} {item.messages.length === 1 ? 'tentativa' : 'tentativas'}
+              </span>
             </header>
             <div className="table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th>Etapa</th>
-                    <th>Template</th>
-                    <th>Status</th>
-                    <th>Submetida</th>
+                    <th>Modelo da mensagem</th>
+                    <th>Situação</th>
+                    <th>Enviada ao provedor</th>
                     <th>Entregue</th>
                     <th>Lida</th>
                   </tr>
@@ -253,8 +271,8 @@ export default function DetailPage() {
                 <tbody>
                   {item.messages.map((m: any) => (
                     <tr key={m.id}>
-                      <td>{stage(m.stage)}</td>
-                      <td>{m.templateName}</td>
+                      <td>{stageLabel(m.stage)}</td>
+                      <td>{templateLabel(m.stage)}</td>
                       <td>
                         <StatusBadge value={m.status} />
                       </td>
@@ -275,29 +293,13 @@ export default function DetailPage() {
             </div>
           </article>
         </div>
-        <aside style={{ display: 'grid', gap: 18 }}>
-          <article className="panel">
+        <aside className="convocation-side">
+          <article className="panel timeline-panel">
             <header className="panel-header">
-              <h2>Processo</h2>
-            </header>
-            <div className="panel-body">
-              <Detail label="Campanha" value={item.campaign.name} />
-              <Detail label="Etapa atual" value={stage(item.stage)} />
-              <Detail
-                label="Próxima ação"
-                value={item.nextActionAt ? date(item.nextActionAt) : 'Nenhuma ação programada'}
-              />
-              {['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE'].includes(item.status) ? (
-                <p className="success">
-                  <Icon name="check" />
-                  Fluxo finalizado
-                </p>
-              ) : null}
-            </div>
-          </article>
-          <article className="panel">
-            <header className="panel-header">
-              <h2>Histórico</h2>
+              <div>
+                <h2>Histórico da comunicação</h2>
+                <span className="muted">Eventos mais recentes primeiro</span>
+              </div>
             </header>
             <div className="panel-body">
               <ol className="timeline">
@@ -312,6 +314,21 @@ export default function DetailPage() {
                 ))}
                 {!events.length ? <p className="muted">Nenhum evento registrado.</p> : null}
               </ol>
+            </div>
+          </article>
+          <article className="panel flow-note">
+            <span className="stat-icon">
+              <Icon name="clock" />
+            </span>
+            <div>
+              <strong>
+                {isTerminal(item.status) ? 'Fluxo finalizado' : 'Acompanhamento automático'}
+              </strong>
+              <p>
+                {isTerminal(item.status)
+                  ? 'Nenhuma nova convocação será enviada para este paciente.'
+                  : 'As próximas convocações serão interrompidas assim que houver confirmação ou cancelamento.'}
+              </p>
             </div>
           </article>
         </aside>
@@ -388,6 +405,14 @@ function Detail({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+function SummaryItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="summary-item">
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </div>
+  );
+}
 function date(value?: string | null) {
   return value ? formatDateTime(value) : '—';
 }
@@ -415,30 +440,15 @@ function formatPhone(value?: string | null) {
 function isTerminal(value: string) {
   return ['CONFIRMED', 'CANCELLED', 'FINISHED_NO_RESPONSE'].includes(value);
 }
-function stage(value: string) {
+function responseLabel(value: string) {
   return (
     (
       {
-        FIRST: '1ª convocação',
-        SECOND: '2ª convocação',
-        THIRD: '3ª convocação',
-        FINISHED: 'Finalizada',
+        CONFIRM: 'confirmação do paciente',
+        CANCEL: 'cancelamento do paciente',
+        FREE_TEXT: 'mensagem de texto livre',
+        UNKNOWN: 'resposta não identificada',
       } as Record<string, string>
-    )[value] ?? value
-  );
-}
-function messageStatus(value: string) {
-  return (
-    (
-      {
-        QUEUED: 'Na fila',
-        PROCESSING: 'Processando',
-        SUBMITTED: 'Submetida',
-        SENT: 'Enviada',
-        DELIVERED: 'Entregue',
-        READ: 'Lida',
-        FAILED: 'Falhou',
-      } as Record<string, string>
-    )[value] ?? value
+    )[value] ?? 'resposta não identificada'
   );
 }

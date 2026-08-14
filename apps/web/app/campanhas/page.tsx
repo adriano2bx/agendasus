@@ -79,7 +79,7 @@ export default function CampaignsPage() {
                   <th>Campanha</th>
                   <th>Pacientes</th>
                   <th>Primeira convocação</th>
-                  <th>Follow-ups</th>
+                  <th>Próximas convocações</th>
                   <th>Situação</th>
                   <th>Ações</th>
                 </tr>
@@ -90,17 +90,13 @@ export default function CampaignsPage() {
                     <td>
                       <div className="cell-main">
                         <strong style={{ color: 'var(--navy)' }}>{item.name}</strong>
-                        <small>ID {item.id.slice(0, 8)}</small>
+                        <small>Identificador {item.id.slice(0, 8)}</small>
                       </div>
                     </td>
                     <td>
                       <strong>{item._count.convocations}</strong>
                     </td>
-                    <td>
-                      {item.firstActionAt
-                        ? formatDateTime(item.firstActionAt)
-                        : '—'}
-                    </td>
+                    <td>{item.firstActionAt ? formatDateTime(item.firstActionAt) : '—'}</td>
                     <td>
                       <div className="cell-main">
                         <span>
