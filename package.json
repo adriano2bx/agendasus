@@ -11,6 +11,7 @@
     "dev": "pnpm --parallel --filter @confirma/api --filter @confirma/worker --filter @confirma/web dev",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
+    "load:test": "node tests/load/load-test.mjs",
     "typecheck": "pnpm -r typecheck",
     "format:check": "prettier --check .",
     "format:write": "prettier --write .",

@@ -41,6 +41,8 @@ em um único serviço de homologação na porta 3000. Para escalar os componente
 separadamente, utilize os Dockerfiles em `docker/`. Consulte
 [o guia de produção](docs/easypanel.md).
 
+Para medir a capacidade da API em homologação, consulte o [guia de teste de carga](docs/teste-de-carga.md) e execute `pnpm load:test`.
+
 ## Pendências antes do piloto
 
 - Validar e ajustar o parser contra PDFs SISREG reais anonimizados.
