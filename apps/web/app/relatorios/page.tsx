@@ -1,16 +1,7 @@
 'use client';
-
 import { useState } from 'react';
-import { Navigation } from '../components/navigation';
-const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-
-export default function ReportsPage() {
-  const [message, setMessage] = useState('');
-  async function download(path: string, name: string) {
-    setMessage('Gerando arquivo…');
-    const response = await fetch(`${API}/reports/${path}`, { headers: { authorization: `Bearer ${sessionStorage.getItem('confirma_access_token') ?? ''}` } });
-    if (!response.ok) { setMessage('Não foi possível gerar o relatório.'); return; }
-    const url = URL.createObjectURL(await response.blob()); const link = document.createElement('a'); link.href = url; link.download = name; link.click(); URL.revokeObjectURL(url); setMessage('Download iniciado.');
-  }
-  return <main className="shell"><Navigation current="/relatorios" /><section className="container"><p className="eyebrow">Relatórios operacionais</p><h1>Exportações</h1><p className="muted">Exporte os dados consolidados para conferência e operação.</p>{message ? <p className={message === 'Download iniciado.' ? 'success' : 'muted'}>{message}</p> : null}<div className="grid"><article className="card"><h2>Relatório de disparos</h2><p className="muted">Pacientes, telefone, campanha, etapa, status, mensagens e resposta.</p><button className="button" onClick={() => void download('dispatches.csv', 'disparos.csv')}>Baixar CSV</button></article><article className="card"><h2>Relatório financeiro</h2><p className="muted">Eventos de cobrança, categoria, custo, moeda e campanha.</p><button className="button" onClick={() => void download('financial.csv', 'financeiro.csv')}>Baixar CSV</button></article><article className="card"><h2>Próximas versões</h2><p className="muted">PDF e Excel serão disponibilizados sobre os mesmos dados, sem alterar o histórico.</p></article></div></section></main>;
-}
+import { AppShell } from '../components/navigation';
+import { Icon } from '../components/ui';
+const API=process.env.NEXT_PUBLIC_API_URL??'http://localhost:3001/api';
+export default function ReportsPage(){const[message,setMessage]=useState('');async function download(path:string,name:string){setMessage('Gerando arquivo…');const response=await fetch(`${API}/reports/${path}`,{headers:{authorization:`Bearer ${sessionStorage.getItem('confirma_access_token')??''}`}});if(!response.ok){setMessage('Não foi possível gerar o relatório.');return;}const url=URL.createObjectURL(await response.blob());const link=document.createElement('a');link.href=url;link.download=name;link.click();URL.revokeObjectURL(url);setMessage('Download iniciado.');}return <AppShell title="Relatórios" eyebrow="Análise operacional"><p className="content-lead">Exporte dados operacionais para conferência, acompanhamento e prestação de contas da operação.</p>{message?<p className={message==='Download iniciado.'?'success':'notice'}>{message}</p>:null}<section className="grid"><Report title="Relatório de disparos" text="Pacientes convocados, campanha, etapa, status das mensagens e resposta final." onClick={()=>void download('dispatches.csv','disparos.csv')}/><Report title="Cancelamentos" text="Pacientes que cancelaram, etapa de origem e data da resposta." disabled/><Report title="Finalizados sem resposta" text="Histórico das tentativas e datas dos disparos concluídos sem retorno." disabled/></section><p className="notice section-gap"><Icon name="report"/><span>Os relatórios desta área contêm apenas informações operacionais. Dados de custos não são exibidos no painel.</span></p></AppShell>;}
+function Report({title,text,onClick,disabled}:{title:string;text:string;onClick?:()=>void;disabled?:boolean}){return <article className="card"><span className="stat-icon"><Icon name="report"/></span><h2 style={{marginTop:18,marginBottom:8}}>{title}</h2><p className="muted" style={{minHeight:64}}>{text}</p><button className="button secondary" disabled={disabled} onClick={onClick}><Icon name="download"/>{disabled?'Em breve':'Baixar CSV'}</button></article>;}

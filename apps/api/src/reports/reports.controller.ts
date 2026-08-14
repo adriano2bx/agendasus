@@ -6,7 +6,4 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
   @Get('dispatches.csv') @Header('content-type', 'text/csv; charset=utf-8') @Header('content-disposition', 'attachment; filename="disparos.csv"')
   dispatches(@Query('campaignId') campaignId?: string) { return this.reports.dispatchesCsv(campaignId); }
-  @Get('financial.csv') @Header('content-type', 'text/csv; charset=utf-8') @Header('content-disposition', 'attachment; filename="financeiro.csv"')
-  financial(@Query('campaignId') campaignId?: string) { return this.reports.financialCsv(campaignId); }
 }
-

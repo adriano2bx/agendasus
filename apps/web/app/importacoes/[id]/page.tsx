@@ -1,109 +1,50 @@
 'use client';
 
 import Link from 'next/link';
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { AppShell } from '../../components/navigation';
+import { Icon, StatusBadge } from '../../components/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-type Review = {
-  id: string;
-  status: string;
-  layout: string | null;
-  warnings: string[] | null;
-  counts: { totalRows: number; validRows: number; warningRows: number; invalidRows: number; identifiedPatients: number };
-  canApprove: boolean;
-  sourceRecordCount: number;
-  rows: Array<{ id: string; rowNumber: number; validationStatus: string; validationIssues: string[] | null; data: Record<string, unknown> | null }>;
-};
+type Review = { id: string; status: string; layout: string | null; warnings: string[] | null; counts: { totalRows: number; validRows: number; warningRows: number; invalidRows: number; identifiedPatients: number }; canApprove: boolean; sourceRecordCount: number; rows: Array<{ id: string; rowNumber: number; validationStatus: string; validationIssues: string[] | null; data: Record<string, unknown> | null }> };
 
 export default function ImportReviewPage() {
-  const params = useParams<{ id: string }>();
-  const [review, setReview] = useState<Review | null>(null);
-  const [message, setMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [campaignId, setCampaignId] = useState<string | null>(null);
-
-  async function request(path: string, init?: RequestInit) {
-    const token = sessionStorage.getItem('confirma_access_token');
-    const response = await fetch(`${API_URL}${path}`, {
-      ...init,
-      headers: { authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
-    });
-    if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? 'Não foi possível concluir a operação');
-    return response.json();
-  }
-
-  async function load() {
-    try { setReview(await request(`/imports/${params.id}/review`)); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Falha ao carregar revisão'); }
-  }
-
+  const params = useParams<{ id: string }>(); const [review, setReview] = useState<Review | null>(null); const [message, setMessage] = useState(''); const [loading, setLoading] = useState(false); const [campaignId, setCampaignId] = useState<string | null>(null); const [query, setQuery] = useState(''); const [onlyIssues, setOnlyIssues] = useState(false);
+  async function request(path: string, init?: RequestInit) { const token = sessionStorage.getItem('confirma_access_token'); const response = await fetch(`${API_URL}${path}`, { ...init, headers: { authorization: `Bearer ${token}`, ...(init?.headers ?? {}) } }); if (!response.ok) throw new Error((await response.json().catch(() => null))?.message ?? 'Não foi possível concluir a operação'); return response.json(); }
+  async function load() { try { setReview(await request(`/imports/${params.id}/review`)); } catch (error) { setMessage(error instanceof Error ? error.message : 'Falha ao carregar revisão'); } }
   useEffect(() => { void load(); }, [params.id]);
+  async function approve() { setLoading(true); setMessage(''); try { await request(`/imports/${params.id}/approve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); await load(); setMessage('Importação aprovada. Defina agora a programação.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível aprovar'); } finally { setLoading(false); } }
+  async function createCampaign(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setLoading(true); setMessage(''); const data = new FormData(event.currentTarget); try { const campaign = await request(`/campaigns/from-import/${params.id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: data.get('name'), firstActionAt: data.get('firstActionAt'), secondIntervalDays: Number(data.get('secondIntervalDays')), secondStartTime: data.get('secondStartTime'), thirdIntervalDays: Number(data.get('thirdIntervalDays')), thirdStartTime: data.get('thirdStartTime') }) }); setMessage(`Campanha criada com ${campaign.patientCount} pacientes. Revise e confirme o início.`); setCampaignId(campaign.id); } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível criar campanha'); } finally { setLoading(false); } }
+  async function scheduleCampaign() { if (!campaignId) return; setLoading(true); setMessage(''); try { await request(`/campaigns/${campaignId}/schedule`, { method: 'POST' }); setMessage('Campanha programada. As convocações serão processadas automaticamente.'); } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível programar'); } finally { setLoading(false); } }
 
-  async function approve() {
-    setLoading(true); setMessage('');
-    try { await request(`/imports/${params.id}/approve`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }); await load(); setMessage('Importação aprovada. Configure a campanha abaixo.'); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível aprovar'); }
-    finally { setLoading(false); }
-  }
+  const visibleRows = useMemo(() => (review?.rows ?? []).filter((row) => { const text = `${row.data?.nome ?? ''} ${row.data?.codigoConvocacaoOrigem ?? ''}`.toLowerCase(); return (!query || text.includes(query.toLowerCase())) && (!onlyIssues || row.validationStatus !== 'VALID'); }), [review, query, onlyIssues]);
+  if (!review) return <AppShell title="Revisão da importação"><div className="panel"><p className="muted" style={{ padding: 24 }}>Carregando dados extraídos…</p>{message ? <p className="error">{message}</p> : null}</div></AppShell>;
+  const approved = review.status === 'APPROVED'; const step = campaignId ? 5 : approved ? 4 : 2;
 
-  async function createCampaign(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault(); setLoading(true); setMessage('');
-    const data = new FormData(event.currentTarget);
-    try {
-      const campaign = await request(`/campaigns/from-import/${params.id}`, {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          name: data.get('name'), firstActionAt: data.get('firstActionAt'),
-          secondIntervalDays: Number(data.get('secondIntervalDays')), secondStartTime: data.get('secondStartTime'),
-          thirdIntervalDays: Number(data.get('thirdIntervalDays')), thirdStartTime: data.get('thirdStartTime'),
-        }),
-      });
-      setMessage(`Campanha criada em rascunho com ${campaign.patientCount} pacientes.`);
-      setCampaignId(campaign.id);
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível criar campanha'); }
-    finally { setLoading(false); }
-  }
+  return <AppShell title={approved ? 'Programar campanha' : 'Conferir importação'} eyebrow={review.layout ?? 'Layout em análise'} actions={<Link href="/importacoes" className="button secondary">Voltar</Link>}>
+    <section className="steps panel"><Step n={1} label="Arquivo" state="done"/><Step n={2} label="Conferência" state={step === 2 ? 'active' : 'done'}/><Step n={3} label="Pacientes" state={step <= 2 ? '' : 'done'}/><Step n={4} label="Programação" state={step === 4 ? 'active' : step > 4 ? 'done' : ''}/><Step n={5} label="Revisão e início" state={step === 5 ? 'active' : ''}/></section>
+    {message ? <p className={/aprovada|criada|programada/.test(message) ? 'success' : 'error'}><Icon name={/aprovada|criada|programada/.test(message) ? 'check' : 'alert'}/>{message}</p> : null}
+    {review.warnings?.map((warning) => <p className="notice" key={warning}><Icon name="alert"/>{warning}</p>)}
 
-  async function scheduleCampaign() {
-    if (!campaignId) return;
-    setLoading(true); setMessage('');
-    try {
-      await request(`/campaigns/${campaignId}/schedule`, { method: 'POST' });
-      setMessage('Campanha programada. O worker processará as convocações no horário definido em modo seguro.');
-    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível programar'); }
-    finally { setLoading(false); }
-  }
-
-  if (!review) return <main className="container"><p className="muted">Carregando revisão…</p>{message ? <p className="error">{message}</p> : null}</main>;
-  const approved = review.status === 'APPROVED';
-  return (
-    <main className="shell">
-      <header className="topbar"><Link className="brand" href="/importacoes">Confirma SUS</Link><span>Revisão de importação</span></header>
-      <section className="container">
-        <p className="eyebrow">{review.layout ?? 'Layout pendente'}</p>
-        <h1>Conferir registros extraídos</h1>
-        <div className="grid">
-          <article className="card stat"><strong>{review.counts.totalRows}</strong><span className="muted">registros encontrados</span></article>
-          <article className="card stat"><strong>{review.counts.identifiedPatients}</strong><span className="muted">pacientes identificados</span></article>
-          <article className="card stat"><strong>{review.counts.invalidRows}</strong><span className="muted">registros inválidos</span></article>
-        </div>
-        {review.warnings?.map((warning) => <p className="error" key={warning}>{warning}</p>)}
-        {message ? <p className={message.startsWith('Importação aprovada') || message.startsWith('Campanha') ? 'success' : 'error'}>{message}</p> : null}
-        {review.canApprove ? <button className="button" disabled={loading} onClick={() => void approve()}>Aprovar importação</button> : null}
-        <section className="card" style={{ marginTop: 28 }}>
-          <h2>Registros</h2>
-          {review.rows.map((row) => <article key={row.id} style={{ borderTop: '1px solid var(--line)', padding: '14px 0' }}><strong>#{row.rowNumber} · {row.validationStatus}</strong><p className="muted">{String(row.data?.nome ?? 'Nome não identificado')} · {String(row.data?.dataNascimento ?? '—')} · {String(row.data?.codigoConvocacaoOrigem ?? '—')}</p>{row.validationIssues?.map((issue) => <small className="error" key={issue}>{issue}</small>)}</article>)}
-        </section>
-        {approved ? <form className="card" style={{ marginTop: 28 }} onSubmit={createCampaign}>
-          <h2>Criar campanha em rascunho</h2>
-          <div className="field"><label htmlFor="name">Nome</label><input id="name" name="name" defaultValue={`SISREG ${new Date().toLocaleDateString('pt-BR')}`} required /></div>
-          <div className="field"><label htmlFor="firstActionAt">1ª convocação — data e horário de início</label><input id="firstActionAt" name="firstActionAt" type="datetime-local" required /></div>
-          <div className="grid"><div className="field"><label htmlFor="secondIntervalDays">2ª convocação — dias após a 1ª</label><input id="secondIntervalDays" name="secondIntervalDays" type="number" min="1" max="30" defaultValue="2" required /></div><div className="field"><label htmlFor="secondStartTime">2ª convocação — horário</label><input id="secondStartTime" name="secondStartTime" type="time" defaultValue="09:00" required /></div><div className="field"><label htmlFor="thirdIntervalDays">3ª convocação — dias após a 2ª</label><input id="thirdIntervalDays" name="thirdIntervalDays" type="number" min="1" max="30" defaultValue="3" required /></div><div className="field"><label htmlFor="thirdStartTime">3ª convocação — horário</label><input id="thirdStartTime" name="thirdStartTime" type="time" defaultValue="09:00" required /></div></div>
-          <button className="button" disabled={loading}>{loading ? 'Criando…' : 'Criar campanha'}</button>
-        </form> : null}
-        {campaignId ? <section className="card" style={{ marginTop: 18 }}><h2>Programar campanha</h2><p className="muted">No ambiente atual, cada tentativa será registrada em modo DRY_RUN: nenhuma mensagem real será enviada.</p><button className="button" disabled={loading} onClick={() => void scheduleCampaign()}>Programar campanha</button></section> : null}
+    {!approved ? <>
+      <section className="grid">
+        <Metric label="Registros encontrados" value={review.counts.totalRows}/><Metric label="Pacientes identificados" value={review.counts.identifiedPatients}/><Metric label="Válidos" value={review.counts.validRows} tone="success"/><Metric label="Precisam de revisão" value={review.counts.warningRows + review.counts.invalidRows} tone={review.counts.warningRows ? 'warning' : 'success'}/>
       </section>
-    </main>
-  );
+      <section className="panel section-gap">
+        <header className="panel-header"><div><h2>Registros extraídos</h2><span className="muted">Confira os dados antes de aprovar</span></div>{review.canApprove ? <button className="button" disabled={loading} onClick={() => void approve()}><Icon name="check"/>Aprovar importação</button> : null}</header>
+        <div className="table-toolbar"><div className="input-with-icon" style={{ width: 300 }}><Icon name="search"/><input className="input" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar paciente ou código"/></div><label className="actions"><input type="checkbox" checked={onlyIssues} onChange={(e) => setOnlyIssues(e.target.checked)}/> Somente pendências</label></div>
+        <div className="table-wrap"><table><thead><tr><th>#</th><th>Paciente</th><th>Nascimento</th><th>Código</th><th>Telefone</th><th>Procedimento</th><th>Situação</th></tr></thead><tbody>{visibleRows.map(row => <tr key={row.id}><td>{row.rowNumber}</td><td><div className="cell-main"><strong>{String(row.data?.nome ?? 'Não identificado')}</strong>{row.validationIssues?.map(issue => <small style={{ color: 'var(--danger)' }} key={issue}>{issue}</small>)}</div></td><td>{String(row.data?.dataNascimento ?? '—')}</td><td>{String(row.data?.codigoConvocacaoOrigem ?? '—')}</td><td>{Array.isArray(row.data?.telefones) ? row.data.telefones[0] : '—'}</td><td>{Array.isArray(row.data?.procedimentos) ? row.data.procedimentos.join(', ') : '—'}</td><td><StatusBadge value={row.validationStatus}/></td></tr>)}</tbody></table></div>
+      </section>
+    </> : !campaignId ? <CampaignForm onSubmit={createCampaign} loading={loading} review={review}/> : <section className="grid-main"><article className="panel"><header className="panel-header"><h2>Campanha pronta para programar</h2><StatusBadge value="DRAFT"/></header><div className="panel-body"><div className="success"><Icon name="check"/>Os pacientes foram agrupados e a programação foi validada.</div><div className="grid"><Summary label="Pacientes" value={review.counts.identifiedPatients}/><Summary label="Registros" value={review.counts.totalRows}/><Summary label="Pendências" value={review.counts.warningRows + review.counts.invalidRows}/></div></div></article><aside className="panel"><header className="panel-header"><h2>Confirmar início</h2></header><div className="panel-body"><p className="muted">Ao confirmar, a campanha ficará programada e o processamento ocorrerá automaticamente nos horários definidos.</p><button className="button" style={{ width: '100%' }} disabled={loading} onClick={() => void scheduleCampaign()}><Icon name="send"/>Programar campanha</button></div></aside></section>}
+  </AppShell>;
 }
+
+function CampaignForm({ onSubmit, loading, review }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void; loading: boolean; review: Review }) { return <form className="grid-main" onSubmit={onSubmit}><article className="panel"><header className="panel-header"><div><h2>Programação das convocações</h2><span className="muted">Defina quando cada tentativa deve começar</span></div></header><div className="panel-body schedule-stack">
+  <div className="schedule-item"><span className="schedule-index">1</span><h3>Primeira convocação</h3><div className="field"><label htmlFor="firstActionAt">Data e horário de início</label><input id="firstActionAt" name="firstActionAt" type="datetime-local" required/></div></div>
+  <div className="schedule-item"><span className="schedule-index">2</span><h3>Segunda convocação</h3><div className="schedule-fields"><div className="field"><label htmlFor="secondIntervalDays">Dias após a primeira</label><input id="secondIntervalDays" name="secondIntervalDays" type="number" min="1" max="30" defaultValue="2" required/></div><div className="field"><label htmlFor="secondStartTime">Horário</label><input id="secondStartTime" name="secondStartTime" type="time" defaultValue="09:00" required/></div></div></div>
+  <div className="schedule-item"><span className="schedule-index">3</span><h3>Terceira convocação</h3><div className="schedule-fields"><div className="field"><label htmlFor="thirdIntervalDays">Dias após a segunda</label><input id="thirdIntervalDays" name="thirdIntervalDays" type="number" min="1" max="30" defaultValue="3" required/></div><div className="field"><label htmlFor="thirdStartTime">Horário</label><input id="thirdStartTime" name="thirdStartTime" type="time" defaultValue="09:00" required/></div></div></div>
+  </div></article><aside className="panel"><header className="panel-header"><h2>Configurações da campanha</h2></header><div className="panel-body"><div className="field"><label htmlFor="name">Nome da campanha</label><input id="name" name="name" defaultValue={`SISREG ${new Date().toLocaleDateString('pt-BR')}`} required/></div><div className="notice"><Icon name="users"/><span><strong>{review.counts.identifiedPatients} pacientes</strong><br/>Uma mensagem por paciente em cada tentativa.</span></div><button className="button" style={{ width: '100%' }} disabled={loading}>{loading ? 'Criando…' : 'Continuar para revisão'}<Icon name="chevron"/></button></div></aside></form>; }
+function Step({ n, label, state }: { n: number; label: string; state?: string }) { return <div className={`step ${state ?? ''}`}><span className="step-number">{state === 'done' ? <Icon name="check"/> : n}</span><span>{label}</span></div>; }
+function Metric({ label, value, tone }: { label: string; value: number; tone?: string }) { return <article className="card stat-card"><div className="stat-copy"><span className="stat-label">{label}</span><strong className="stat-value" style={{ color: tone === 'success' ? 'var(--success)' : tone === 'warning' ? 'var(--warning)' : undefined }}>{value}</strong></div></article>; }
+function Summary({ label, value }: { label: string; value: number }) { return <div className="cell-main"><span className="stat-label">{label}</span><strong style={{ color: 'var(--navy)', fontSize: 22 }}>{value}</strong></div>; }
