@@ -1223,32 +1223,55 @@ tbody tr:hover {
   overflow: hidden;
   padding: 64px;
   color: #fff;
-  background:
-    radial-gradient(circle at 75% 20%, rgba(11, 169, 157, 0.3), transparent 27%),
-    linear-gradient(145deg, #0e3973, #081f42);
+  isolation: isolate;
+  background: #071f46;
 }
 .login-visual::before,
 .login-visual::after {
   content: '';
   position: absolute;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
+  inset: 0;
 }
 .login-visual::before {
-  width: 430px;
-  height: 430px;
-  right: -100px;
-  top: -80px;
+  z-index: -2;
+  background: url('/images/login.png') center 36% / cover no-repeat;
+  transform: scale(1.015);
 }
 .login-visual::after {
-  width: 250px;
-  height: 250px;
-  right: 40px;
-  top: 10px;
+  z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(5, 24, 57, 0.16), transparent 52%),
+    linear-gradient(
+      0deg,
+      rgba(5, 24, 57, 0.98) 0%,
+      rgba(5, 24, 57, 0.9) 17%,
+      rgba(5, 24, 57, 0.18) 52%,
+      transparent 72%
+    );
 }
 .login-message {
   position: relative;
   max-width: 560px;
+  padding-top: 24px;
+  text-shadow: 0 2px 18px rgba(3, 18, 43, 0.25);
+}
+.login-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 14px;
+  color: #5ee3da;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.login-eyebrow::before {
+  content: '';
+  width: 26px;
+  height: 2px;
+  margin-right: 10px;
+  border-radius: 999px;
+  background: currentColor;
 }
 .login-message h2 {
   margin-bottom: 14px;
@@ -1257,7 +1280,8 @@ tbody tr:hover {
   line-height: 1.2;
 }
 .login-message p {
-  color: rgba(255, 255, 255, 0.66);
+  max-width: 510px;
+  color: rgba(255, 255, 255, 0.78);
   font-size: 15px;
   line-height: 1.7;
 }
