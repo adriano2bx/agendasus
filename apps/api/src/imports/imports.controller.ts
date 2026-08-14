@@ -4,7 +4,9 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
@@ -15,6 +17,8 @@ import type { AuthenticatedRequest } from '../auth/auth.guard.js';
 import { Body, Req } from '@nestjs/common';
 import { ApproveImportDto } from './approve-import.dto.js';
 import { ImportsService } from './imports.service.js';
+import { UpdateImportRowDto } from './update-import-row.dto.js';
+import { ImportsQueryDto } from './imports-query.dto.js';
 
 @Controller('imports')
 @UseGuards(AuthGuard)
@@ -33,8 +37,8 @@ export class ImportsController {
   }
 
   @Get()
-  list() {
-    return this.importsService.list();
+  list(@Query() query: ImportsQueryDto) {
+    return this.importsService.list(query);
   }
 
   @Get(':id')
@@ -54,5 +58,15 @@ export class ImportsController {
     @Req() request: AuthenticatedRequest,
   ) {
     return this.importsService.approve(id, request.user!.sub, input.note);
+  }
+
+  @Patch(':id/rows/:rowId')
+  updateRow(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('rowId', ParseUUIDPipe) rowId: string,
+    @Body() input: UpdateImportRowDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.importsService.updateRow(id, rowId, input, request.user!.sub);
   }
 }

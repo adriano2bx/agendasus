@@ -1,4 +1,4 @@
-import type { SVGProps } from 'react';
+import type { ReactNode, SVGProps } from 'react';
 import { statusLabel } from '../lib/labels';
 
 export function Brand({ negative = false }: { negative?: boolean }) {
@@ -133,6 +133,19 @@ export function Icon({ name, ...props }: { name: string } & SVGProps<SVGSVGEleme
         <path d="M21 15a4 4 0 0 1-4 4H8l-5 3 1.7-5A8 8 0 1 1 21 15Z" />
       </>
     ),
+    menu: (
+      <>
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </>
+    ),
+    close: <path d="m6 6 12 12M18 6 6 18" />,
+    refresh: (
+      <>
+        <path d="M20 7v5h-5" />
+        <path d="M4 17v-5h5" />
+        <path d="M6.1 9a7 7 0 0 1 11.6-2L20 9M4 15l2.3 2a7 7 0 0 0 11.6-2" />
+      </>
+    ),
   };
   return (
     <svg {...common} {...props}>
@@ -143,15 +156,18 @@ export function Icon({ name, ...props }: { name: string } & SVGProps<SVGSVGEleme
 
 export function StatusBadge({ value }: { value: string }) {
   const terminal = ['CONFIRMED', 'DELIVERED', 'READ', 'VALID', 'COMPLETED'];
-  const danger = ['CANCELLED', 'FAILED', 'SEND_ERROR', 'INVALID'];
+  const danger = ['FAILED', 'SEND_ERROR', 'INVALID'];
   const warning = ['PAUSED', 'WARNING', 'WAITING_RESPONSE', 'REVIEW_REQUIRED'];
-  const tone = terminal.includes(value)
-    ? 'success'
-    : danger.includes(value)
-      ? 'danger'
-      : warning.includes(value)
-        ? 'warning'
-        : 'info';
+  const tone =
+    value === 'CANCELLED'
+      ? 'cancelled'
+      : terminal.includes(value)
+        ? 'success'
+        : danger.includes(value)
+          ? 'danger'
+          : warning.includes(value)
+            ? 'warning'
+            : 'info';
   return (
     <span className={`status status-${tone}`}>
       <i />
@@ -160,14 +176,94 @@ export function StatusBadge({ value }: { value: string }) {
   );
 }
 
-export function EmptyState({ title, description }: { title: string; description: string }) {
+export function EmptyState({
+  title,
+  description,
+  icon = 'file',
+  action,
+}: {
+  title: string;
+  description: string;
+  icon?: string;
+  action?: ReactNode;
+}) {
   return (
     <div className="empty-state">
       <span className="empty-icon">
-        <Icon name="file" />
+        <Icon name={icon} />
       </span>
       <strong>{title}</strong>
       <p>{description}</p>
+      {action ? <div className="empty-action">{action}</div> : null}
+    </div>
+  );
+}
+
+export function LoadingState({ label = 'Carregando dados…' }: { label?: string }) {
+  return (
+    <div className="loading-state" role="status" aria-live="polite">
+      <span className="spinner" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+export function Pagination({
+  page,
+  pages,
+  total,
+  limit,
+  onPage,
+}: {
+  page: number;
+  pages: number;
+  total: number;
+  limit: number;
+  onPage: (page: number) => void;
+}) {
+  if (total === 0) return null;
+  const first = (page - 1) * limit + 1;
+  const last = Math.min(page * limit, total);
+  return (
+    <nav className="pagination" aria-label="Paginação">
+      <span>
+        {first.toLocaleString('pt-BR')}–{last.toLocaleString('pt-BR')} de{' '}
+        {total.toLocaleString('pt-BR')}
+      </span>
+      <div>
+        <button
+          className="button secondary small"
+          disabled={page <= 1}
+          onClick={() => onPage(page - 1)}
+        >
+          Anterior
+        </button>
+        <strong>
+          Página {page} de {pages}
+        </strong>
+        <button
+          className="button secondary small"
+          disabled={page >= pages}
+          onClick={() => onPage(page + 1)}
+        >
+          Próxima
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+export function Feedback({
+  tone,
+  children,
+}: {
+  tone: 'success' | 'error' | 'notice';
+  children: ReactNode;
+}) {
+  return (
+    <div className={tone} role={tone === 'error' ? 'alert' : 'status'} aria-live="polite">
+      <Icon name={tone === 'success' ? 'check' : tone === 'error' ? 'alert' : 'file'} />
+      <span>{children}</span>
     </div>
   );
 }

@@ -1,8 +1,18 @@
-import { IsDateString, IsInt, IsNotEmpty, IsString, Matches, Max, Min } from 'class-validator';
+import {
+  IsDateString,
+  IsInt,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateCampaignDto {
   @IsString()
   @IsNotEmpty()
+  @MaxLength(120)
   name!: string;
 
   @IsDateString()
@@ -24,4 +34,3 @@ export class CreateCampaignDto {
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
   thirdStartTime!: string;
 }
-

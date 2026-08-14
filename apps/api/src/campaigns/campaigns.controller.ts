@@ -1,7 +1,20 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { AuthGuard, type AuthenticatedRequest } from '../auth/auth.guard.js';
 import { CreateCampaignDto } from './create-campaign.dto.js';
 import { CampaignsService } from './campaigns.service.js';
+import { CampaignsQueryDto } from './campaigns-query.dto.js';
+import { UpdateCampaignDto } from './update-campaign.dto.js';
 
 @Controller('campaigns')
 @UseGuards(AuthGuard)
@@ -18,8 +31,27 @@ export class CampaignsController {
   }
 
   @Get()
-  list() {
-    return this.campaignsService.list();
+  list(@Query() query: CampaignsQueryDto) {
+    return this.campaignsService.list(query);
+  }
+
+  @Get('options')
+  options() {
+    return this.campaignsService.options();
+  }
+
+  @Get(':id')
+  detail(@Param('id', ParseUUIDPipe) id: string) {
+    return this.campaignsService.detail(id);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: UpdateCampaignDto,
+    @Req() request: AuthenticatedRequest,
+  ) {
+    return this.campaignsService.updateDraft(id, input, request.user!.sub);
   }
 
   @Post(':id/schedule')

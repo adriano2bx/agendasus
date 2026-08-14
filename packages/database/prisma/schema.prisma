@@ -174,15 +174,16 @@ model Patient {
 }
 
 model PatientPhone {
-  id                  String   @id @default(uuid()) @db.Uuid
-  patientId           String   @map("patient_id") @db.Uuid
-  originalValue       String   @map("original_value")
-  normalizedValue     String   @map("normalized_value")
+  id                  String        @id @default(uuid()) @db.Uuid
+  patientId           String        @map("patient_id") @db.Uuid
+  originalValue       String        @map("original_value")
+  normalizedValue     String        @map("normalized_value")
   valid               Boolean
   mobile              Boolean
-  selectedForWhatsApp Boolean  @default(false) @map("selected_for_whatsapp")
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  patient             Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  selectedForWhatsApp Boolean       @default(false) @map("selected_for_whatsapp")
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+  patient             Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  convocations        Convocation[] @relation("ConvocationSelectedPhone")
 
   @@unique([patientId, normalizedValue])
   @@index([normalizedValue])
@@ -240,28 +241,31 @@ model Procedure {
 }
 
 model Convocation {
-  id           String              @id @default(uuid()) @db.Uuid
-  campaignId   String              @map("campaign_id") @db.Uuid
-  patientId    String              @map("patient_id") @db.Uuid
-  stage        ConvocationStage    @default(FIRST)
-  status       ConvocationStatus   @default(SCHEDULED)
-  nextActionAt DateTime?           @map("next_action_at") @db.Timestamptz(3)
-  confirmedAt  DateTime?           @map("confirmed_at") @db.Timestamptz(3)
-  cancelledAt  DateTime?           @map("cancelled_at") @db.Timestamptz(3)
-  finishedAt   DateTime?           @map("finished_at") @db.Timestamptz(3)
-  version      Int                 @default(0)
-  createdAt    DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt    DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  campaign     Campaign            @relation(fields: [campaignId], references: [id])
-  patient      Patient             @relation(fields: [patientId], references: [id])
-  records      ConvocationRecord[]
-  messages     Message[]
-  responses    MessageResponse[]
-  handoff      HandoffEvent?
+  id              String              @id @default(uuid()) @db.Uuid
+  campaignId      String              @map("campaign_id") @db.Uuid
+  patientId       String              @map("patient_id") @db.Uuid
+  selectedPhoneId String?             @map("selected_phone_id") @db.Uuid
+  stage           ConvocationStage    @default(FIRST)
+  status          ConvocationStatus   @default(SCHEDULED)
+  nextActionAt    DateTime?           @map("next_action_at") @db.Timestamptz(3)
+  confirmedAt     DateTime?           @map("confirmed_at") @db.Timestamptz(3)
+  cancelledAt     DateTime?           @map("cancelled_at") @db.Timestamptz(3)
+  finishedAt      DateTime?           @map("finished_at") @db.Timestamptz(3)
+  version         Int                 @default(0)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  campaign        Campaign            @relation(fields: [campaignId], references: [id])
+  patient         Patient             @relation(fields: [patientId], references: [id])
+  selectedPhone   PatientPhone?       @relation("ConvocationSelectedPhone", fields: [selectedPhoneId], references: [id])
+  records         ConvocationRecord[]
+  messages        Message[]
+  responses       MessageResponse[]
+  handoff         HandoffEvent?
 
   @@unique([campaignId, patientId])
   @@index([status, nextActionAt])
   @@index([campaignId, stage, status])
+  @@index([selectedPhoneId])
   @@map("convocations")
 }
 

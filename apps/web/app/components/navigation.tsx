@@ -2,9 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { authFetch } from '../lib/api';
 import { Brand, Icon } from './ui';
 
+const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 const groups = [
   {
     label: 'Operação',
@@ -18,41 +20,109 @@ const groups = [
   { label: 'Análise', links: [{ label: 'Relatórios', href: '/relatorios', icon: 'report' }] },
 ] as const;
 
-export function AppShell({ children, title, eyebrow, actions }: { children: ReactNode; title: string; eyebrow?: string; actions?: ReactNode }) {
+export function AppShell({
+  children,
+  title,
+  eyebrow,
+  actions,
+}: {
+  children: ReactNode;
+  title: string;
+  eyebrow?: string;
+  actions?: ReactNode;
+}) {
   const pathname = usePathname();
   const router = useRouter();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
   const crumbs = pathname.split('/').filter(Boolean);
+
+  useEffect(() => {
+    authFetch(`${API}/auth/me`)
+      .then(async (response) => {
+        if (response.ok) setUser(await response.json());
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => setMenuOpen(false), [pathname]);
 
   function logout() {
     sessionStorage.removeItem('confirma_access_token');
+    sessionStorage.removeItem('confirma_user');
     router.replace('/login');
   }
 
+  const initials = (user?.name ?? 'Administrador')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+
   return (
     <div className="app-shell">
-      <aside className="sidebar">
-        <Link href="/painel" className="sidebar-brand" aria-label="Confirma SUS — início"><Brand negative /></Link>
+      <button
+        className="mobile-menu-button"
+        aria-label={menuOpen ? 'Fechar menu' : 'Abrir menu'}
+        aria-expanded={menuOpen}
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        <Icon name={menuOpen ? 'close' : 'menu'} />
+      </button>
+      {menuOpen ? (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Fechar menu"
+          onClick={() => setMenuOpen(false)}
+        />
+      ) : null}
+      <aside className={`sidebar${menuOpen ? ' open' : ''}`}>
+        <Link href="/painel" className="sidebar-brand" aria-label="Confirma SUS — início">
+          <Brand negative />
+        </Link>
         <nav className="side-nav" aria-label="Navegação principal">
           {groups.map((group) => (
             <section className="nav-group" key={group.label}>
               <span className="nav-label">{group.label}</span>
               {group.links.map((link) => {
                 const active = pathname === link.href || pathname.startsWith(`${link.href}/`);
-                return <Link key={link.href} href={link.href} className={`nav-item${active ? ' active' : ''}`}><Icon name={link.icon} /><span>{link.label}</span></Link>;
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-label={link.label}
+                    title={link.label}
+                    className={`nav-item${active ? ' active' : ''}`}
+                  >
+                    <Icon name={link.icon} />
+                    <span>{link.label}</span>
+                  </Link>
+                );
               })}
             </section>
           ))}
         </nav>
         <div className="user-panel">
-          <span className="user-avatar">AD</span>
-          <span className="user-copy"><strong>Administrador</strong><small>Acesso administrativo</small></span>
-          <button className="icon-button inverse" aria-label="Sair" title="Sair" onClick={logout}><Icon name="logout" /></button>
+          <span className="user-avatar">{initials}</span>
+          <span className="user-copy">
+            <strong>{user?.name ?? 'Administrador'}</strong>
+            <small>{user?.email ?? 'Acesso administrativo'}</small>
+          </span>
+          <button className="icon-button inverse" aria-label="Sair" title="Sair" onClick={logout}>
+            <Icon name="logout" />
+          </button>
         </div>
       </aside>
       <div className="workspace">
         <header className="workspace-header">
           <div>
-            <div className="breadcrumb"><Link href="/painel">Confirma SUS</Link>{crumbs.map((crumb) => <span key={crumb}>/ {humanize(crumb)}</span>)}</div>
+            <div className="breadcrumb" aria-label="Navegação estrutural">
+              <Link href="/painel">Confirma SUS</Link>
+              {crumbs.map((crumb) => (
+                <span key={crumb}>/ {humanize(crumb)}</span>
+              ))}
+            </div>
             {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
             <h1 className="page-title">{title}</h1>
           </div>
@@ -64,8 +134,18 @@ export function AppShell({ children, title, eyebrow, actions }: { children: Reac
   );
 }
 
-export function Navigation() { return null; }
+export function Navigation() {
+  return null;
+}
 
 function humanize(value: string) {
-  return value.replace(/-/g, ' ').replace(/^./, (letter) => letter.toUpperCase()).replace(/^[0-9a-f-]{20,}$/i, 'Detalhe');
+  if (/^[0-9a-f-]{20,}$/i.test(value)) return 'Detalhe';
+  const labels: Record<string, string> = {
+    painel: 'Visão geral',
+    importacoes: 'Importações',
+    campanhas: 'Campanhas',
+    convocacoes: 'Convocações',
+    relatorios: 'Relatórios',
+  };
+  return labels[value] ?? value.replace(/-/g, ' ').replace(/^./, (letter) => letter.toUpperCase());
 }

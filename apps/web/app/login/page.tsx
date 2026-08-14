@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Brand, Icon } from '../components/ui';
 
@@ -10,6 +10,10 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (sessionStorage.getItem('confirma_access_token')) router.replace('/painel');
+  }, [router]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,8 +27,12 @@ export default function LoginPage() {
         body: JSON.stringify({ email: data.get('email'), password: data.get('password') }),
       });
       if (!response.ok) throw new Error('E-mail ou senha inválidos');
-      const result = (await response.json()) as { accessToken: string };
+      const result = (await response.json()) as {
+        accessToken: string;
+        user: { name: string; email: string; role: string };
+      };
       sessionStorage.setItem('confirma_access_token', result.accessToken);
+      sessionStorage.setItem('confirma_user', JSON.stringify(result.user));
       router.push('/painel');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Não foi possível entrar');

@@ -2,19 +2,26 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BadRequestException, ConflictException, Inject, Injectable } from '@nestjs/common';
-import { prisma } from '@confirma/database';
+import { Prisma, prisma } from '@confirma/database';
+import { normalizeBrazilianPhone, patientGroupingKey, selectWhatsAppPhone } from '@confirma/domain';
 import type { ParseImportJob } from '@confirma/queue';
 import type { Queue } from 'bullmq';
 import { environment } from '../environment.js';
 import { IMPORT_QUEUE } from './imports.constants.js';
 import { validateImportedRow } from './import-row.js';
+import { readImportedRow } from './import-row.js';
+import type { UpdateImportRowDto } from './update-import-row.dto.js';
+import type { ImportsQueryDto } from './imports-query.dto.js';
 
 @Injectable()
 export class ImportsService {
   constructor(@Inject(IMPORT_QUEUE) private readonly queue: Queue<ParseImportJob>) {}
 
   async create(file: Express.Multer.File) {
-    if (file.mimetype !== 'application/pdf' || !file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))) {
+    if (
+      file.mimetype !== 'application/pdf' ||
+      !file.buffer.subarray(0, 5).equals(Buffer.from('%PDF-'))
+    ) {
       throw new BadRequestException('Envie um arquivo PDF válido');
     }
 
@@ -64,17 +71,34 @@ export class ImportsService {
 
       return { id: createdImport.id, status: 'PROCESSING' as const };
     } catch (error) {
-      await import('node:fs/promises').then(({ unlink }) => unlink(temporaryPath).catch(() => undefined));
+      await import('node:fs/promises').then(({ unlink }) =>
+        unlink(temporaryPath).catch(() => undefined),
+      );
       throw error;
     }
   }
 
-  list() {
-    return prisma.import.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 50,
-      include: { files: { select: { id: true, originalName: true, sizeBytes: true } } },
-    });
+  async list(input: ImportsQueryDto) {
+    const where = input.status ? { status: input.status } : {};
+    const [total, items] = await Promise.all([
+      prisma.import.count({ where }),
+      prisma.import.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (input.page - 1) * input.limit,
+        take: input.limit,
+        include: { files: { select: { id: true, originalName: true, sizeBytes: true } } },
+      }),
+    ]);
+    return {
+      items,
+      pagination: {
+        page: input.page,
+        limit: input.limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / input.limit)),
+      },
+    };
   }
 
   findById(id: string) {
@@ -96,16 +120,49 @@ export class ImportsService {
       validationIssues: row.validationIssues,
       data: row.normalizedData,
     }));
+    const validatedRows = rows.map((row) => ({ ...row, validated: validateImportedRow(row.data) }));
     const validRows = rows.filter((row) => row.validationStatus === 'VALID').length;
     const warningRows = rows.filter((row) => row.validationStatus === 'WARNING').length;
     const invalidRows = rows.filter((row) => row.validationStatus === 'INVALID').length;
-    const validPatientKeys = new Set(
-      rows
-        .filter((row) => row.validationStatus !== 'INVALID')
-        .map((row) => validateImportedRow(row.data))
-        .filter((row) => row.normalizedName && row.birthDate && row.issues.length === 0)
-        .map((row) => `${row.normalizedCpf ?? `${row.normalizedName}:${row.birthDate?.toISOString().slice(0, 10)}`}`),
-    );
+    const grouped = new Map<string, typeof validatedRows>();
+    for (const row of validatedRows) {
+      const value = row.validated;
+      if (!value.normalizedName || !value.birthDate) continue;
+      const key = patientGroupingKey({
+        name: value.nome ?? '',
+        birthDate: value.birthDate.toISOString().slice(0, 10),
+        cpf: value.normalizedCpf,
+      });
+      const group = grouped.get(key) ?? [];
+      group.push(row);
+      grouped.set(key, group);
+    }
+    const patientGroups = [...grouped.entries()].map(([key, group]) => {
+      const first = group[0]!.validated;
+      const phones = [...new Set(group.flatMap((row) => row.validated.telefones))];
+      const normalizedPhones = phones.map(normalizeBrazilianPhone);
+      const requested = group
+        .map((row) => row.validated.selectedPhone)
+        .find((phone): phone is string => Boolean(phone));
+      const requestedNormalized = requested ? normalizeBrazilianPhone(requested) : null;
+      const selected =
+        (requestedNormalized?.valid && requestedNormalized.mobile ? requestedNormalized : null) ??
+        selectWhatsAppPhone(normalizedPhones);
+      return {
+        key,
+        name: first.nome,
+        birthDate: first.dataNascimento,
+        cpf: first.cpf,
+        rowIds: group.map((row) => row.id),
+        recordCount: group.length,
+        codes: group.map((row) => row.validated.codigoConvocacaoOrigem).filter(Boolean),
+        procedures: [...new Set(group.flatMap((row) => row.validated.procedimentos))],
+        phones: normalizedPhones,
+        selectedPhone: selected?.normalized ?? null,
+        eligible: group.every((row) => row.validated.issues.length === 0) && Boolean(selected),
+        issues: [...new Set(group.flatMap((row) => row.validated.issues))],
+      };
+    });
     return {
       id: imported.id,
       status: imported.status,
@@ -113,8 +170,18 @@ export class ImportsService {
       totalReported: imported.totalReported,
       recordsFound: imported.recordsFound,
       warnings: imported.warnings,
-      counts: { totalRows: rows.length, validRows, warningRows, invalidRows, identifiedPatients: validPatientKeys.size },
-      canApprove: ['READY_FOR_REVIEW', 'REVIEW_REQUIRED'].includes(imported.status) && imported.campaigns.length === 0,
+      counts: {
+        totalRows: rows.length,
+        validRows,
+        warningRows,
+        invalidRows,
+        identifiedPatients: patientGroups.length,
+        eligiblePatients: patientGroups.filter((group) => group.eligible).length,
+        patientsWithoutValidPhone: patientGroups.filter((group) => !group.selectedPhone).length,
+      },
+      canApprove:
+        ['READY_FOR_REVIEW', 'REVIEW_REQUIRED'].includes(imported.status) &&
+        imported.campaigns.length === 0,
       sourceRecordCount: imported.sourceRecords.length,
       campaign: imported.campaigns[0]
         ? {
@@ -125,7 +192,76 @@ export class ImportsService {
           }
         : null,
       rows,
+      patientGroups,
     };
+  }
+
+  async updateRow(id: string, rowId: string, input: UpdateImportRowDto, userId: string) {
+    return prisma.$transaction(async (transaction) => {
+      const imported = await transaction.import.findUnique({
+        where: { id },
+        include: { campaigns: { select: { id: true } } },
+      });
+      if (!imported) throw new BadRequestException('Importação não encontrada');
+      if (imported.status === 'APPROVED' || imported.campaigns.length > 0) {
+        throw new ConflictException('Registros de uma importação aprovada não podem ser alterados');
+      }
+      if (!['READY_FOR_REVIEW', 'REVIEW_REQUIRED'].includes(imported.status)) {
+        throw new ConflictException('A importação ainda não está disponível para revisão');
+      }
+      const row = await transaction.importRow.findFirst({ where: { id: rowId, importId: id } });
+      if (!row) throw new BadRequestException('Registro importado não encontrado');
+      const previous = readImportedRow(row.normalizedData);
+      const normalizedData = {
+        ...previous,
+        ...input,
+        codigoConvocacaoOrigem:
+          input.codigoConvocacaoOrigem?.trim() ?? previous.codigoConvocacaoOrigem,
+        nome: input.nome?.trim() ?? previous.nome,
+        cpf: input.cpf !== undefined ? input.cpf.trim() || null : previous.cpf,
+        telefones:
+          input.telefones?.map((value) => value.trim()).filter(Boolean) ?? previous.telefones,
+        procedimentos:
+          input.procedimentos?.map((value) => value.trim()).filter(Boolean) ??
+          previous.procedimentos,
+        selectedPhone:
+          input.selectedPhone !== undefined
+            ? input.selectedPhone.trim() || null
+            : previous.selectedPhone,
+      };
+      const validated = validateImportedRow(normalizedData);
+      const updated = await transaction.importRow.update({
+        where: { id: row.id },
+        data: {
+          normalizedData: normalizedData as Prisma.InputJsonValue,
+          validationStatus: validated.issues.length ? 'INVALID' : 'VALID',
+          validationIssues: validated.issues,
+        },
+      });
+      const invalid = await transaction.importRow.count({
+        where: { importId: id, validationStatus: { not: 'VALID' } },
+      });
+      await transaction.import.update({
+        where: { id },
+        data: { status: invalid > 0 ? 'REVIEW_REQUIRED' : 'READY_FOR_REVIEW' },
+      });
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          eventType: 'IMPORT_ROW_UPDATED',
+          entityType: 'import_row',
+          entityId: row.id,
+          previousData: previous as unknown as Prisma.InputJsonValue,
+          newData: normalizedData as Prisma.InputJsonValue,
+        },
+      });
+      return {
+        id: updated.id,
+        validationStatus: updated.validationStatus,
+        validationIssues: updated.validationIssues,
+        data: updated.normalizedData,
+      };
+    });
   }
 
   async approve(id: string, userId: string, note?: string) {
@@ -138,11 +274,16 @@ export class ImportsService {
       if (!['READY_FOR_REVIEW', 'REVIEW_REQUIRED'].includes(imported.status)) {
         throw new ConflictException('Esta importação não está disponível para aprovação');
       }
-      if (imported.campaigns.length > 0) throw new ConflictException('A importação já possui uma campanha');
+      if (imported.campaigns.length > 0)
+        throw new ConflictException('A importação já possui uma campanha');
 
-      const normalizedRows = imported.rows.map((row) => ({ row, validated: validateImportedRow(row.normalizedData) }));
+      const normalizedRows = imported.rows.map((row) => ({
+        row,
+        validated: validateImportedRow(row.normalizedData),
+      }));
       const valid = normalizedRows.filter(({ validated }) => validated.issues.length === 0);
-      if (valid.length === 0) throw new BadRequestException('A importação não contém registros válidos para campanha');
+      if (valid.length === 0)
+        throw new BadRequestException('A importação não contém registros válidos para campanha');
 
       for (const { row, validated } of normalizedRows) {
         await transaction.importRow.update({
@@ -176,7 +317,13 @@ export class ImportsService {
         data: { status: 'APPROVED', approvedAt: new Date(), validationSummary: summary },
       });
       await transaction.auditLog.create({
-        data: { userId, eventType: 'IMPORT_APPROVED', entityType: 'import', entityId: id, metadata: { note, ...summary } },
+        data: {
+          userId,
+          eventType: 'IMPORT_APPROVED',
+          entityType: 'import',
+          entityId: id,
+          metadata: { note, ...summary },
+        },
       });
       return { id, status: 'APPROVED' as const, ...summary };
     });

@@ -14,16 +14,24 @@ export async function processSendMessage(job: Job<SendMessageJob>): Promise<void
   const created = await prisma.$transaction(async (transaction) => {
     const convocation = await transaction.convocation.findUnique({
       where: { id: job.data.convocationId },
-      include: { campaign: true, patient: { include: { phones: true } } },
+      include: {
+        campaign: true,
+        selectedPhone: true,
+        patient: { include: { phones: true } },
+      },
     });
     if (!convocation || !['SCHEDULED', 'RUNNING'].includes(convocation.campaign.status))
       return null;
     if (convocation.status !== 'QUEUED' || convocation.stage !== job.data.stage) return null;
 
     const stage = stageToMessageStage(convocation.stage);
-    const phone = convocation.patient.phones.find(
-      (item) => item.selectedForWhatsApp && item.valid && item.mobile,
-    );
+    const phone =
+      (convocation.selectedPhone?.valid && convocation.selectedPhone.mobile
+        ? convocation.selectedPhone
+        : null) ??
+      convocation.patient.phones.find(
+        (item) => item.selectedForWhatsApp && item.valid && item.mobile,
+      );
     if (!stage || !phone) {
       await transaction.convocation.update({
         where: { id: convocation.id },

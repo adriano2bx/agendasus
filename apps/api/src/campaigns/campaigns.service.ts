@@ -1,14 +1,25 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { CampaignStatus, prisma } from '@confirma/database';
-import { normalizeBrazilianPhone, normalizePatientName, patientGroupingKey, selectWhatsAppPhone } from '@confirma/domain';
+import {
+  normalizeBrazilianPhone,
+  normalizePatientName,
+  patientGroupingKey,
+  selectWhatsAppPhone,
+} from '@confirma/domain';
 import { readImportedRow } from '../imports/import-row.js';
 import type { CreateCampaignDto } from './create-campaign.dto.js';
+import type { CampaignsQueryDto } from './campaigns-query.dto.js';
+import type { UpdateCampaignDto } from './update-campaign.dto.js';
 
 @Injectable()
 export class CampaignsService {
   async createFromImport(importId: string, input: CreateCampaignDto, userId: string) {
     const firstActionAt = new Date(input.firstActionAt);
-    if (Number.isNaN(firstActionAt.valueOf())) throw new BadRequestException('Data da primeira tentativa inválida');
+    if (Number.isNaN(firstActionAt.valueOf()))
+      throw new BadRequestException('Data da primeira tentativa inválida');
+    if (firstActionAt.getTime() < Date.now() - 60_000) {
+      throw new BadRequestException('A primeira convocação não pode ser programada no passado');
+    }
 
     return prisma.$transaction(async (transaction) => {
       const imported = await transaction.import.findUnique({
@@ -16,9 +27,12 @@ export class CampaignsService {
         include: { sourceRecords: { include: { importRow: true } }, campaigns: true },
       });
       if (!imported) throw new BadRequestException('Importação não encontrada');
-      if (imported.status !== 'APPROVED') throw new ConflictException('A importação precisa estar aprovada');
-      if (imported.campaigns.length > 0) throw new ConflictException('Esta importação já possui uma campanha');
-      if (imported.sourceRecords.length === 0) throw new BadRequestException('Não há registros válidos para criar campanha');
+      if (imported.status !== 'APPROVED')
+        throw new ConflictException('A importação precisa estar aprovada');
+      if (imported.campaigns.length > 0)
+        throw new ConflictException('Esta importação já possui uma campanha');
+      if (imported.sourceRecords.length === 0)
+        throw new BadRequestException('Não há registros válidos para criar campanha');
 
       const campaign = await transaction.campaign.create({
         data: {
@@ -37,7 +51,11 @@ export class CampaignsService {
       for (const record of imported.sourceRecords) {
         const row = readImportedRow(record.importRow.normalizedData);
         if (!row.nome || !row.dataNascimento) continue;
-        const key = patientGroupingKey({ name: row.nome, birthDate: toIsoDate(row.dataNascimento), cpf: row.cpf });
+        const key = patientGroupingKey({
+          name: row.nome,
+          birthDate: toIsoDate(row.dataNascimento),
+          cpf: row.cpf,
+        });
         const group = groups.get(key) ?? [];
         group.push(record);
         groups.set(key, group);
@@ -63,9 +81,18 @@ export class CampaignsService {
               data: { displayName: row.nome, normalizedName, birthDate, ...(cpf ? { cpf } : {}) },
             });
 
-        const allPhones = records.flatMap((record) => readImportedRow(record.importRow.normalizedData).telefones);
+        const importedRows = records.map((record) =>
+          readImportedRow(record.importRow.normalizedData),
+        );
+        const allPhones = importedRows.flatMap((value) => value.telefones);
         const normalizedPhones = allPhones.map(normalizeBrazilianPhone);
-        const selected = selectWhatsAppPhone(normalizedPhones);
+        const requestedPhone = importedRows
+          .map((value) => value.selectedPhone)
+          .find((value): value is string => Boolean(value));
+        const requested = requestedPhone ? normalizeBrazilianPhone(requestedPhone) : null;
+        const selected =
+          (requested?.valid && requested.mobile ? requested : null) ??
+          selectWhatsAppPhone(normalizedPhones);
         if (!selected) continue;
         await transaction.patientPhone.createMany({
           data: normalizedPhones.map((phone) => ({
@@ -78,26 +105,166 @@ export class CampaignsService {
           })),
           skipDuplicates: true,
         });
+        const selectedPhone = await transaction.patientPhone.findUniqueOrThrow({
+          where: {
+            patientId_normalizedValue: {
+              patientId: patient.id,
+              normalizedValue: selected.normalized,
+            },
+          },
+        });
         const convocation = await transaction.convocation.create({
-          data: { campaignId: campaign.id, patientId: patient.id, nextActionAt: firstActionAt },
+          data: {
+            campaignId: campaign.id,
+            patientId: patient.id,
+            selectedPhoneId: selectedPhone.id,
+            nextActionAt: firstActionAt,
+          },
         });
         await transaction.convocationRecord.createMany({
-          data: records.map((record) => ({ convocationId: convocation.id, sourceRecordId: record.id })),
+          data: records.map((record) => ({
+            convocationId: convocation.id,
+            sourceRecordId: record.id,
+          })),
         });
       }
 
       const counts = await transaction.convocation.count({ where: { campaignId: campaign.id } });
       await transaction.auditLog.create({
-        data: { userId, eventType: 'CAMPAIGN_CREATED', entityType: 'campaign', entityId: campaign.id, newData: { importId, patientCount: counts } },
+        data: {
+          userId,
+          eventType: 'CAMPAIGN_CREATED',
+          entityType: 'campaign',
+          entityId: campaign.id,
+          newData: { importId, patientCount: counts },
+        },
       });
       return { ...campaign, patientCount: counts };
     });
   }
 
-  list() {
+  async list(input: CampaignsQueryDto) {
+    const where = {
+      ...(input.status ? { status: input.status } : {}),
+      ...(input.query?.trim()
+        ? { name: { contains: input.query.trim(), mode: 'insensitive' as const } }
+        : {}),
+    };
+    const [total, items] = await Promise.all([
+      prisma.campaign.count({ where }),
+      prisma.campaign.findMany({
+        where,
+        skip: (input.page - 1) * input.limit,
+        take: input.limit,
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { convocations: true } } },
+      }),
+    ]);
+    return {
+      items,
+      pagination: {
+        page: input.page,
+        limit: input.limit,
+        total,
+        pages: Math.max(1, Math.ceil(total / input.limit)),
+      },
+    };
+  }
+
+  options() {
     return prisma.campaign.findMany({
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { convocations: true } } },
+      select: { id: true, name: true, status: true },
+    });
+  }
+
+  async detail(id: string) {
+    const campaign = await prisma.campaign.findUniqueOrThrow({
+      where: { id },
+      include: {
+        import: { include: { files: { select: { originalName: true } } } },
+        _count: { select: { convocations: true } },
+      },
+    });
+    const [byStatus, byStage, messagesByStatus, recentAudit] = await Promise.all([
+      prisma.convocation.groupBy({
+        by: ['status'],
+        where: { campaignId: id },
+        _count: { _all: true },
+      }),
+      prisma.convocation.groupBy({
+        by: ['stage'],
+        where: { campaignId: id },
+        _count: { _all: true },
+      }),
+      prisma.message.groupBy({
+        by: ['status'],
+        where: { convocation: { campaignId: id } },
+        _count: { _all: true },
+      }),
+      prisma.auditLog.findMany({
+        where: { entityType: 'campaign', entityId: id },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+        include: { user: { select: { name: true } } },
+      }),
+    ]);
+    return {
+      ...campaign,
+      convocationByStatus: Object.fromEntries(
+        byStatus.map((item) => [item.status, item._count._all]),
+      ),
+      convocationByStage: Object.fromEntries(byStage.map((item) => [item.stage, item._count._all])),
+      messageByStatus: Object.fromEntries(
+        messagesByStatus.map((item) => [item.status, item._count._all]),
+      ),
+      recentAudit,
+    };
+  }
+
+  async updateDraft(id: string, input: UpdateCampaignDto, userId: string) {
+    const firstActionAt = input.firstActionAt ? new Date(input.firstActionAt) : undefined;
+    if (firstActionAt && firstActionAt.getTime() < Date.now() - 60_000) {
+      throw new BadRequestException('A primeira convocação não pode ser programada no passado');
+    }
+    return prisma.$transaction(async (transaction) => {
+      const campaign = await transaction.campaign.findUnique({ where: { id } });
+      if (!campaign) throw new BadRequestException('Campanha não encontrada');
+      if (campaign.status !== 'DRAFT') {
+        throw new ConflictException('Somente campanhas em rascunho podem ser editadas');
+      }
+      const updated = await transaction.campaign.update({
+        where: { id },
+        data: {
+          ...(input.name ? { name: input.name.trim() } : {}),
+          ...(firstActionAt ? { firstActionAt } : {}),
+          ...(input.secondIntervalDays !== undefined
+            ? { secondIntervalDays: input.secondIntervalDays }
+            : {}),
+          ...(input.secondStartTime ? { secondStartTime: input.secondStartTime } : {}),
+          ...(input.thirdIntervalDays !== undefined
+            ? { thirdIntervalDays: input.thirdIntervalDays }
+            : {}),
+          ...(input.thirdStartTime ? { thirdStartTime: input.thirdStartTime } : {}),
+        },
+      });
+      if (firstActionAt) {
+        await transaction.convocation.updateMany({
+          where: { campaignId: id, status: 'SCHEDULED' },
+          data: { nextActionAt: firstActionAt },
+        });
+      }
+      await transaction.auditLog.create({
+        data: {
+          userId,
+          eventType: 'CAMPAIGN_DRAFT_UPDATED',
+          entityType: 'campaign',
+          entityId: id,
+          previousData: campaign,
+          newData: updated,
+        },
+      });
+      return updated;
     });
   }
 
@@ -110,7 +277,15 @@ export class CampaignsService {
   }
 
   async resume(id: string, userId: string) {
-    return this.changeCampaignState(id, userId, 'RUNNING');
+    const result = await this.changeCampaignState(id, userId, 'RUNNING');
+    const pending = await prisma.convocation.count({
+      where: {
+        campaignId: id,
+        status: { in: ['SCHEDULED', 'QUEUED', 'WAITING_RESPONSE'] },
+        nextActionAt: { lte: new Date() },
+      },
+    });
+    return { ...result, pendingDue: pending };
   }
 
   async cancel(id: string, userId: string) {
@@ -118,12 +293,17 @@ export class CampaignsService {
       const campaign = await transaction.campaign.findUnique({ where: { id } });
       if (!campaign) throw new BadRequestException('Campanha não encontrada');
       if (campaign.status === 'CANCELLED') return campaign;
-      if (campaign.status === 'COMPLETED') throw new ConflictException('Campanha concluída não pode ser cancelada');
+      if (campaign.status === 'COMPLETED')
+        throw new ConflictException('Campanha concluída não pode ser cancelada');
       const updated = await transaction.campaign.update({
-        where: { id }, data: { status: 'CANCELLED', cancelledAt: new Date() },
+        where: { id },
+        data: { status: 'CANCELLED', cancelledAt: new Date() },
       });
       await transaction.convocation.updateMany({
-        where: { campaignId: id, status: { in: ['SCHEDULED', 'QUEUED', 'PROCESSING', 'WAITING_RESPONSE'] } },
+        where: {
+          campaignId: id,
+          status: { in: ['SCHEDULED', 'QUEUED', 'PROCESSING', 'WAITING_RESPONSE'] },
+        },
         data: { nextActionAt: null },
       });
       await transaction.auditLog.create({
@@ -133,7 +313,11 @@ export class CampaignsService {
     });
   }
 
-  private async changeCampaignState(id: string, userId: string, target: 'SCHEDULED' | 'PAUSED' | 'RUNNING') {
+  private async changeCampaignState(
+    id: string,
+    userId: string,
+    target: 'SCHEDULED' | 'PAUSED' | 'RUNNING',
+  ) {
     return prisma.$transaction(async (transaction) => {
       const campaign = await transaction.campaign.findUnique({ where: { id } });
       if (!campaign) throw new BadRequestException('Campanha não encontrada');
@@ -146,14 +330,26 @@ export class CampaignsService {
       if (target === 'SCHEDULED' && campaign.status !== 'DRAFT') {
         throw new ConflictException('Somente campanhas em rascunho podem ser programadas');
       }
+      if (
+        target === 'SCHEDULED' &&
+        (!campaign.firstActionAt || campaign.firstActionAt < new Date(Date.now() - 60_000))
+      ) {
+        throw new ConflictException('Revise a data da primeira convocação antes de programar');
+      }
       if (target === 'PAUSED' && !['SCHEDULED', 'RUNNING'].includes(campaign.status)) {
-        throw new ConflictException('Somente campanhas programadas ou em execução podem ser pausadas');
+        throw new ConflictException(
+          'Somente campanhas programadas ou em execução podem ser pausadas',
+        );
       }
       if (target === 'RUNNING' && campaign.status !== 'PAUSED') {
         throw new ConflictException('Somente campanhas pausadas podem ser retomadas');
       }
       const updated = await transaction.campaign.update({
-        where: { id }, data: { status: target, ...(target === 'RUNNING' ? { startedAt: campaign.startedAt ?? new Date() } : {}) },
+        where: { id },
+        data: {
+          status: target,
+          ...(target === 'RUNNING' ? { startedAt: campaign.startedAt ?? new Date() } : {}),
+        },
       });
       await transaction.auditLog.create({
         data: { userId, eventType: `CAMPAIGN_${target}`, entityType: 'campaign', entityId: id },

@@ -29,5 +29,11 @@ export class AuthService {
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     };
   }
-}
 
+  me(id: string) {
+    return prisma.user.findUniqueOrThrow({
+      where: { id },
+      select: { id: true, name: true, email: true, role: true },
+    });
+  }
+}

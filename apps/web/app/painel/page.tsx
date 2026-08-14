@@ -1,115 +1,237 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppShell } from '../components/navigation';
-import { EmptyState, Icon } from '../components/ui';
+import { Feedback, Icon, LoadingState } from '../components/ui';
 import { authFetch } from '../lib/api';
+import { formatDateTime } from '../lib/date-time';
+import { stageLabel } from '../lib/labels';
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
 type Overview = {
   activeCampaigns: number;
-  convocations: number;
+  pausedCampaigns: number;
+  patientsInProcess: number;
+  waitingResponse: number;
+  sourceRecords: number;
   messages: number;
-  convocationByStatus: Record<string, number>;
+  failures: number;
+  outcomes: { confirmed: number; cancelled: number; noResponse: number };
   messageByStatus: Record<string, number>;
-  stageByStatus?: Array<{ stage: string; status: string; _count: { _all: number } }>;
+  stageByStatus: Array<{ stage: string; status: string; count: number }>;
+  generatedAt: string;
 };
+type CampaignOption = { id: string; name: string; status: string };
 
 export default function DashboardPage() {
   const [data, setData] = useState<Overview | null>(null);
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([]);
   const [error, setError] = useState('');
-  useEffect(() => {
-    authFetch(`${API}/dashboard/overview`)
-      .then(async (response) =>
-        response.ok
-          ? setData(await response.json())
-          : setError('Não foi possível carregar o painel.'),
-      )
-      .catch(() => setError('Não foi possível carregar o painel.'));
-  }, []);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dateFrom, setDateFrom] = useState(today);
+  const [dateTo, setDateTo] = useState(today);
+  const [campaignId, setCampaignId] = useState('');
 
-  const confirmed = data?.convocationByStatus.CONFIRMED ?? 0;
-  const cancelled = data?.convocationByStatus.CANCELLED ?? 0;
-  const waiting = data?.convocationByStatus.WAITING_RESPONSE ?? 0;
-  const failed = (data?.convocationByStatus.SEND_ERROR ?? 0) + (data?.messageByStatus.FAILED ?? 0);
-  const finalTotal = Math.max(
-    confirmed + cancelled + (data?.convocationByStatus.FINISHED_NO_RESPONSE ?? 0),
-    1,
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setRefreshing(true);
+      setError('');
+      try {
+        const query = new URLSearchParams({ dateFrom, dateTo });
+        if (campaignId) query.set('campaignId', campaignId);
+        const response = await authFetch(`${API}/dashboard/overview?${query}`);
+        if (!response.ok) throw new Error('Não foi possível carregar os indicadores.');
+        setData(await response.json());
+      } catch (cause) {
+        setError(
+          cause instanceof Error ? cause.message : 'Não foi possível carregar os indicadores.',
+        );
+      } finally {
+        setRefreshing(false);
+      }
+    },
+    [campaignId, dateFrom, dateTo],
   );
 
+  useEffect(() => {
+    authFetch(`${API}/campaigns/options`)
+      .then(async (response) => response.ok && setCampaigns(await response.json()))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const timer = window.setInterval(() => void load(true), 30_000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  const stageSummary = useMemo(() => {
+    const result: Record<string, Record<string, number>> = {};
+    for (const item of data?.stageByStatus ?? []) {
+      result[item.stage] ??= {};
+      result[item.stage]![item.status] = item.count;
+    }
+    return result;
+  }, [data]);
+  const finalTotal = data
+    ? data.outcomes.confirmed + data.outcomes.cancelled + data.outcomes.noResponse
+    : 0;
+
   return (
-    <AppShell title="Visão geral" eyebrow="Operação de hoje">
-      <p className="content-lead">
-        Acompanhe campanhas, respostas e ocorrências que precisam de atenção.
-      </p>
-      {error ? (
-        <p className="error">
-          <Icon name="alert" />
-          {error}
+    <AppShell
+      title="Visão geral"
+      eyebrow="Operação"
+      actions={
+        <button className="button secondary" disabled={refreshing} onClick={() => void load()}>
+          <Icon name="refresh" />
+          {refreshing ? 'Atualizando…' : 'Atualizar'}
+        </button>
+      }
+    >
+      <div className="lead-row">
+        <p className="content-lead">
+          Acompanhe o fluxo de convocações e as ocorrências que exigem atenção.
         </p>
-      ) : null}
-      {!data ? (
-        <div className="panel">
-          <EmptyState
-            title="Carregando indicadores"
-            description="Estamos consolidando os dados operacionais."
+        {data ? (
+          <small className="last-updated">Atualizado em {formatDateTime(data.generatedAt)}</small>
+        ) : null}
+      </div>
+      <section className="filter-bar" aria-label="Filtros do painel">
+        <div className="field compact">
+          <label htmlFor="dashboard-date-from">Data inicial</label>
+          <input
+            id="dashboard-date-from"
+            type="date"
+            value={dateFrom}
+            max={dateTo}
+            onChange={(event) => setDateFrom(event.target.value)}
           />
         </div>
+        <div className="field compact">
+          <label htmlFor="dashboard-date-to">Data final</label>
+          <input
+            id="dashboard-date-to"
+            type="date"
+            value={dateTo}
+            min={dateFrom}
+            max={today()}
+            onChange={(event) => setDateTo(event.target.value)}
+          />
+        </div>
+        <div className="field compact filter-grow">
+          <label htmlFor="dashboard-campaign">Campanha</label>
+          <select
+            id="dashboard-campaign"
+            value={campaignId}
+            onChange={(event) => setCampaignId(event.target.value)}
+          >
+            <option value="">Todas as campanhas</option>
+            {campaigns.map((campaign) => (
+              <option value={campaign.id} key={campaign.id}>
+                {campaign.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="quick-filters">
+          <button
+            className="button secondary small"
+            onClick={() => {
+              setDateFrom(today());
+              setDateTo(today());
+            }}
+          >
+            Hoje
+          </button>
+          <button
+            className="button secondary small"
+            onClick={() => {
+              setDateFrom(daysAgo(6));
+              setDateTo(today());
+            }}
+          >
+            7 dias
+          </button>
+          <button
+            className="button secondary small"
+            onClick={() => {
+              setDateFrom(firstDayOfMonth());
+              setDateTo(today());
+            }}
+          >
+            Este mês
+          </button>
+        </div>
+      </section>
+      {error ? (
+        <Feedback tone="error">
+          {error}{' '}
+          <button className="inline-action" onClick={() => void load()}>
+            Tentar novamente
+          </button>
+        </Feedback>
+      ) : null}
+      {!data ? (
+        <section className="panel">
+          <LoadingState label="Consolidando os dados operacionais…" />
+        </section>
       ) : (
         <>
-          <section className="grid">
+          <section className="grid dashboard-metrics">
             <Metric
               label="Campanhas ativas"
               value={data.activeCampaigns}
-              meta="em execução ou programadas"
+              meta={`${data.pausedCampaigns} pausadas`}
               icon="send"
             />
             <Metric
               label="Pacientes em processo"
-              value={data.convocations}
-              meta="convocações no período"
+              value={data.patientsInProcess}
+              meta="ainda não finalizados"
               icon="users"
             />
             <Metric
-              label="Aguardando resposta"
-              value={waiting}
-              meta="próxima convocação monitorada"
-              icon="clock"
-              tone="warning"
+              label="Mensagens no período"
+              value={data.messages}
+              meta={`${data.sourceRecords} registros de origem`}
+              icon="message"
             />
             <Metric
-              label="Falhas para revisar"
-              value={failed}
-              meta="mensagens ou convocações"
+              label="Ocorrências para revisar"
+              value={data.failures}
+              meta="pacientes com falha"
               icon="alert"
-              tone="danger"
+              tone={data.failures ? 'danger' : undefined}
             />
           </section>
           <section className="grid-main section-gap">
             <article className="panel">
               <header className="panel-header">
-                <h2>Resultado das convocações</h2>
+                <div>
+                  <h2>Resultados no período</h2>
+                  <span className="muted">Percentuais calculados sobre fluxos finalizados</span>
+                </div>
                 <Link className="table-link" href="/convocacoes">
-                  Ver todas →
+                  Ver pacientes →
                 </Link>
               </header>
               <div className="panel-body metric-list">
                 <Progress
                   label="Confirmados"
-                  value={confirmed}
+                  value={data.outcomes.confirmed}
                   total={finalTotal}
                   color="var(--success)"
                 />
                 <Progress
                   label="Cancelados"
-                  value={cancelled}
+                  value={data.outcomes.cancelled}
                   total={finalTotal}
-                  color="var(--danger)"
+                  color="var(--cancelled)"
                 />
                 <Progress
                   label="Sem resposta"
-                  value={data.convocationByStatus.FINISHED_NO_RESPONSE ?? 0}
+                  value={data.outcomes.noResponse}
                   total={finalTotal}
                   color="var(--warning)"
                 />
@@ -117,35 +239,42 @@ export default function DashboardPage() {
             </article>
             <article className="panel">
               <header className="panel-header">
-                <h2>Atenção operacional</h2>
+                <div>
+                  <h2>Atenção operacional</h2>
+                  <span className="muted">Atalhos para itens acionáveis</span>
+                </div>
               </header>
               <div className="panel-body">
-                <Attention label="Falhas de envio" value={failed} href="/convocacoes" danger />
-                <Attention label="Aguardando resposta" value={waiting} href="/convocacoes" />
                 <Attention
-                  label="Campanhas ativas"
-                  value={data.activeCampaigns}
-                  href="/campanhas"
+                  label="Falhas de envio"
+                  value={data.failures}
+                  href="/convocacoes?status=SEND_ERROR"
+                  danger
+                />
+                <Attention
+                  label="Aguardando resposta"
+                  value={data.waitingResponse}
+                  href="/convocacoes?status=WAITING_RESPONSE"
+                />
+                <Attention
+                  label="Campanhas pausadas"
+                  value={data.pausedCampaigns}
+                  href="/campanhas?status=PAUSED"
                 />
               </div>
             </article>
           </section>
           <section className="panel section-gap">
             <header className="panel-header">
-              <h2>Mensagens por situação</h2>
+              <div>
+                <h2>Mensagens por etapa</h2>
+                <span className="muted">Situação das tentativas no período selecionado</span>
+              </div>
             </header>
-            <div className="panel-body grid">
-              {Object.entries(data.messageByStatus).map(([status, value]) => (
-                <div className="cell-main" key={status}>
-                  <span className="stat-label">{messageLabel(status)}</span>
-                  <strong className="stat-value" style={{ fontSize: 22 }}>
-                    {value}
-                  </strong>
-                </div>
+            <div className="stage-overview">
+              {['FIRST', 'SECOND', 'THIRD'].map((stage) => (
+                <StageCard key={stage} stage={stage} values={stageSummary[stage] ?? {}} />
               ))}
-              {Object.keys(data.messageByStatus).length === 0 ? (
-                <p className="muted">Nenhuma mensagem processada ainda.</p>
-              ) : null}
             </div>
           </section>
         </>
@@ -191,14 +320,16 @@ function Progress({
   total: number;
   color: string;
 }) {
-  const percent = Math.round((value / total) * 100);
+  const percent = total ? Math.round((value / total) * 100) : 0;
   return (
     <div className="metric-row">
       <span>{label}</span>
       <span className="progress">
         <i style={{ width: `${percent}%`, background: color }} />
       </span>
-      <strong>{value}</strong>
+      <strong>
+        {value} <small>{percent}%</small>
+      </strong>
     </div>
   );
 }
@@ -214,28 +345,51 @@ function Attention({
   danger?: boolean;
 }) {
   return (
-    <Link
-      className="row"
-      href={href}
-      style={{ gridTemplateColumns: '1fr auto', textDecoration: 'none' }}
-    >
+    <Link className="attention-row" href={href}>
       <span>{label}</span>
-      <strong style={{ color: danger ? 'var(--danger)' : 'var(--navy)' }}>{value}</strong>
+      <strong className={danger ? 'danger-text' : ''}>{value}</strong>
+      <Icon name="chevron" />
     </Link>
   );
 }
-function messageLabel(value: string) {
+function StageCard({ stage, values }: { stage: string; values: Record<string, number> }) {
   return (
-    (
-      {
-        QUEUED: 'Na fila',
-        PROCESSING: 'Em processamento',
-        SUBMITTED: 'Aceitas pelo provedor',
-        SENT: 'Enviadas',
-        DELIVERED: 'Entregues',
-        READ: 'Lidas',
-        FAILED: 'Falhas',
-      } as Record<string, string>
-    )[value] ?? 'Situação não identificada'
+    <article className="stage-card">
+      <div className="stage-card-heading">
+        <span className="schedule-index">{stage === 'FIRST' ? 1 : stage === 'SECOND' ? 2 : 3}</span>
+        <strong>{stageLabel(stage)}</strong>
+      </div>
+      <dl>
+        <StageValue label="Aceitas" value={values.SUBMITTED ?? 0} />
+        <StageValue label="Enviadas" value={values.SENT ?? 0} />
+        <StageValue label="Entregues" value={values.DELIVERED ?? 0} />
+        <StageValue label="Lidas" value={values.READ ?? 0} />
+        <StageValue label="Falhas" value={values.FAILED ?? 0} danger />
+      </dl>
+    </article>
   );
+}
+function StageValue({ label, value, danger }: { label: string; value: number; danger?: boolean }) {
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className={danger && value ? 'danger-text' : ''}>{value.toLocaleString('pt-BR')}</dd>
+    </div>
+  );
+}
+function toInputDate(value: Date) {
+  return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+}
+function today() {
+  return toInputDate(new Date());
+}
+function daysAgo(days: number) {
+  const value = new Date();
+  value.setDate(value.getDate() - days);
+  return toInputDate(value);
+}
+function firstDayOfMonth() {
+  const value = new Date();
+  value.setDate(1);
+  return toInputDate(value);
 }

@@ -3,7 +3,14 @@
 import Link from 'next/link';
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { AppShell } from '../components/navigation';
-import { EmptyState, Icon, StatusBadge } from '../components/ui';
+import {
+  EmptyState,
+  Feedback,
+  Icon,
+  LoadingState,
+  Pagination,
+  StatusBadge,
+} from '../components/ui';
 import { authFetch } from '../lib/api';
 import { formatDateTime } from '../lib/date-time';
 
@@ -21,14 +28,34 @@ export default function ImportsPage() {
   const [loading, setLoading] = useState(false);
   const [fileName, setFileName] = useState('');
   const [imports, setImports] = useState<ImportItem[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState('');
+  const [dragging, setDragging] = useState(false);
+  const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
+  const [status, setStatus] = useState('');
   const input = useRef<HTMLInputElement>(null);
-  async function loadImports() {
-    const response = await authFetch(`${API_URL}/imports`);
-    if (response.ok) setImports(await response.json());
+  async function loadImports(page = pagination.page, silent = false) {
+    if (!silent) setListLoading(true);
+    try {
+      const query = new URLSearchParams({ page: String(page), limit: String(pagination.limit) });
+      if (status) query.set('status', status);
+      const response = await authFetch(`${API_URL}/imports?${query}`);
+      if (!response.ok) throw new Error();
+      const result = await response.json();
+      setImports(result.items);
+      setPagination(result.pagination);
+      setListError('');
+    } catch {
+      setListError('Não foi possível carregar as importações.');
+    } finally {
+      setListLoading(false);
+    }
   }
   useEffect(() => {
-    void loadImports();
-  }, []);
+    void loadImports(1);
+    const timer = window.setInterval(() => void loadImports(undefined, true), 4_000);
+    return () => window.clearInterval(timer);
+  }, [status]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
@@ -43,7 +70,7 @@ export default function ImportsPage() {
       form.reset();
       setFileName('');
       await loadImports();
-      window.setTimeout(() => location.assign(`/importacoes/${result.id}`), 500);
+      location.assign(`/importacoes/${result.id}`);
     } catch (cause) {
       setMessage(cause instanceof Error ? cause.message : 'Falha no envio do arquivo');
     } finally {
@@ -70,7 +97,26 @@ export default function ImportsPage() {
             <span className="badge">PDF · até 20 MB</span>
           </header>
           <div className="panel-body">
-            <label className="upload-zone" htmlFor="file">
+            <label
+              className={`upload-zone${dragging ? ' dragging' : ''}`}
+              htmlFor="file"
+              onDragEnter={(event) => {
+                event.preventDefault();
+                setDragging(true);
+              }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(event) => {
+                event.preventDefault();
+                setDragging(false);
+                const file = event.dataTransfer.files[0];
+                if (!file || !input.current) return;
+                const transfer = new DataTransfer();
+                transfer.items.add(file);
+                input.current.files = transfer.files;
+                setFileName(file.name);
+              }}
+            >
               <input
                 ref={input}
                 id="file"
@@ -91,10 +137,9 @@ export default function ImportsPage() {
               </p>
             </label>
             {message ? (
-              <p className={message.startsWith('Arquivo') ? 'success' : 'error'}>
-                <Icon name={message.startsWith('Arquivo') ? 'check' : 'alert'} />
+              <Feedback tone={message.startsWith('Arquivo') ? 'success' : 'error'}>
                 {message}
-              </p>
+              </Feedback>
             ) : null}
             <div className="actions" style={{ marginTop: 16 }}>
               <button className="button" disabled={loading || !fileName}>
@@ -128,48 +173,76 @@ export default function ImportsPage() {
       </form>
       <section className="panel section-gap">
         <header className="panel-header">
-          <h2>Importações recentes</h2>
-          <span className="muted">{imports.length} arquivos</span>
-        </header>
-        {imports.length ? (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Arquivo</th>
-                  <th>Data</th>
-                  <th>Registros</th>
-                  <th>Situação</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {imports.map((item) => (
-                  <tr key={item.id}>
-                    <td>
-                      <Link className="table-link" href={`/importacoes/${item.id}`}>
-                        {item.files[0]?.originalName ?? 'Relatório SISREG'}
-                      </Link>
-                    </td>
-                    <td>{formatDateTime(item.createdAt)}</td>
-                    <td>{item.recordsFound}</td>
-                    <td>
-                      <StatusBadge value={item.status} />
-                    </td>
-                    <td>
-                      <Link
-                        className="icon-button"
-                        aria-label="Abrir importação"
-                        href={`/importacoes/${item.id}`}
-                      >
-                        <Icon name="chevron" />
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            <h2>Histórico de importações</h2>
+            <span className="muted">{pagination.total.toLocaleString('pt-BR')} arquivos</span>
           </div>
+          <select
+            className="input toolbar-select"
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+            aria-label="Filtrar situação da importação"
+          >
+            <option value="">Todas as situações</option>
+            <option value="PROCESSING">Em processamento</option>
+            <option value="READY_FOR_REVIEW">Pronta para revisão</option>
+            <option value="REVIEW_REQUIRED">Revisão necessária</option>
+            <option value="APPROVED">Aprovada</option>
+            <option value="FAILED">Falha</option>
+          </select>
+        </header>
+        {listError ? (
+          <Feedback tone="error">
+            {listError}{' '}
+            <button className="inline-action" onClick={() => void loadImports()}>
+              Tentar novamente
+            </button>
+          </Feedback>
+        ) : null}
+        {listLoading ? (
+          <LoadingState label="Carregando importações…" />
+        ) : imports.length ? (
+          <>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Arquivo</th>
+                    <th>Data</th>
+                    <th>Registros</th>
+                    <th>Situação</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {imports.map((item) => (
+                    <tr key={item.id}>
+                      <td>
+                        <Link className="table-link" href={`/importacoes/${item.id}`}>
+                          {item.files[0]?.originalName ?? 'Relatório SISREG'}
+                        </Link>
+                      </td>
+                      <td>{formatDateTime(item.createdAt)}</td>
+                      <td>{item.recordsFound}</td>
+                      <td>
+                        <StatusBadge value={item.status} />
+                      </td>
+                      <td>
+                        <Link
+                          className="icon-button"
+                          aria-label="Abrir importação"
+                          href={`/importacoes/${item.id}`}
+                        >
+                          <Icon name="chevron" />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination {...pagination} onPage={(next) => void loadImports(next)} />
+          </>
         ) : (
           <EmptyState
             title="Nenhuma importação"
